@@ -6,6 +6,9 @@ This is a prototype for a web interaction and state exploration agent. The goal 
 
 Key output is in `agent_output/`.
 
+## Workflow
+
+![Workflow](workflow.png)
 ## Files
 
 - `main.py`: primary entry point for the agent logic
@@ -47,12 +50,4 @@ The process is:
 - Same URL but different content (modal open, different content snapshot)
 - Same URL and same content (dedupe as existing state)
 
-## Visual & Tooling
 
-For the full visual workflow, open `workflow.png` in the repo root. It shows the same flow with steps and decision points.
-
-![Workflow](workflow.png)
-
----
-
-For your request, this README is now the project landing doc and includes your workflow path as an illustrated description. Feel free to update wording to match your exact intent.
