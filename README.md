@@ -1,67 +1,53 @@
-# Web Scrawl Agent
+# Web Agent
 
 ## Project Overview
 
-This repository contains two related parts:
+This is a prototype for a web interaction and state exploration agent. The goal is to crawl a web page (or app) with automatic actions and capture UI states, building a graph of discovered states/transitions with screenshots + structured data.
 
-- A Python prototype for crawling a web page or app, taking automatic actions, and capturing discovered UI states.
-- A React/Vite frontend for viewing and working with the agent experience.
-
-The original agent output is stored in `agent_output/`, including the graph JSON and screenshots.
+Key output is in `agent_output/`.
 
 ## Workflow
 
 ![Workflow](workflow.png)
+## Files
 
-## Project Files
-
-- `main.py`: primary entry point for the Python agent logic
+- `main.py`: primary entry point for the agent logic
 - `Design Document.md`: architectural notes and design decisions
 - `prototype_run_notes.md`: test notes and observations
 - `requirements.txt`: Python dependencies
+- `.env`: environment settings
 - `agent_output/`: structured graph output and screenshots
-- `workflow.png`: workflow illustration
-- `src/`: React frontend source
-- `package.json`: frontend scripts and dependencies
+- `workflow.png`: visual workflow illustration
 
-## Run The Python Agent
+## Setup
 
-1. Create a virtual environment:
-   `python -m venv .venv`
-2. Activate it:
-   `source .venv/bin/activate`
-3. Install dependencies:
-   `pip install -r requirements.txt`
-4. Add any required environment variables to `.env`
-5. Run the agent:
-   `python main.py`
+1. Create Python virtual environment: `python -m venv .venv`
+2. Activate: `source .venv/bin/activate`
+3. Install dependencies: `pip install -r requirements.txt`
+4. Add any env variables to `.env` if needed
 
-Adjust parameters in `main.py` as needed for target URL, credentials, timeouts, and exploration behavior.
+## Run
 
-## Run The Frontend
+`python main.py`
 
-**Prerequisites:** Node.js
+Adjust parameters in `main.py` as needed for target URL, credentials, timeouts, etc.
 
-1. Install dependencies:
-   `npm install`
-2. Set `GEMINI_API_KEY` in `.env.local` if the app needs Gemini access.
-3. Run the app:
-   `npm run dev`
-
-## Workflow Details
+## Workflow Illustration (path as "illusion")
 
 The process is:
 
-1. Start from a URL and optional login credentials.
-2. Capture the current UI state, including URL, title, DOM summary, and candidate elements.
-3. Manage discovered states and transitions as nodes and edges.
-4. Use an exploration strategy such as BFS or DFS to choose the next action.
-5. Execute actions with Playwright, such as click, fill, submit, or navigate.
-6. Capture each new state and detect duplicates by URL and content.
-7. Continue until all reachable states are explored or a timeout is reached.
-8. Output graph data in `agent_output/graph.json`, with screenshots in `agent_output/screenshots/`.
+1. Start from URL and optional login credentials
+2. Agent captures current UI state (URL, title, DOM summary) - candidate elements (buttons, links, forms, tabs, modals)
+3. Node manager handles states/nodes and transitions/edges
+4. Exploration strategy (BFS/DFS) chooses next action
+5. Execute action via Playwright (click, fill, submit, navigate)
+6. Capture new state (graph node), detect duplicates via URL+content
+7. Continue until all reachable states or timeout
+8. Output graph JSON in `agent_output/graph.json`, with nodes and edges
 
-## Edge Cases
+### Edge cases handled
 
-- Same URL with different content, such as a modal or changed state.
-- Same URL and same content, which is deduplicated as an existing state.
+- Same URL but different content (modal open, different content snapshot)
+- Same URL and same content (dedupe as existing state)
+
+
