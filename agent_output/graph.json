@@ -1,0 +1,143 @@
+{
+  "nodes": [
+    {
+      "id": "state_001",
+      "url": "https://www.google.com/",
+      "title": "Google",
+      "state_fingerprint": "9e97e12c09af523a",
+      "interactive_elements": [
+        "el_1:a:Gmail",
+        "el_2:a:\u5716\u7247",
+        "el_3:button:Google \u61c9\u7528\u7a0b\u5f0f",
+        "el_4:a:\u767b\u5165",
+        "el_5:button:\u8a9e\u97f3\u641c\u5c0b",
+        "el_6:button:\u4ee5\u5716\u641c\u5c0b",
+        "el_7:link:AI \u6a21\u5f0f",
+        "el_8:button:Google \u641c\u5c0b",
+        "el_9:input:\u597d\u624b\u6c23",
+        "el_10:a:English",
+        "el_11:a:\u95dc\u65bc Google",
+        "el_12:a:\u5ee3\u544a",
+        "el_13:a:\u5546\u696d",
+        "el_14:a:\u641c\u5c0b\u670d\u52d9\u7684\u904b\u4f5c\u65b9\u5f0f",
+        "el_15:a:\u96b1\u79c1\u6b0a",
+        "el_16:a:\u670d\u52d9\u689d\u6b3e",
+        "el_17:button:\u8a2d\u5b9a"
+      ],
+      "screenshot": "agent_output/screenshots/state_001.png"
+    },
+    {
+      "id": "state_002",
+      "url": "https://workspace.google.com/intl/zh-TW/gmail/",
+      "title": "Gmail\uff1a\u4eba\u4eba\u9069\u7528\u7684\u5b89\u5168 AI \u96fb\u5b50\u90f5\u4ef6\u670d\u52d9 | Google Workspace",
+      "state_fingerprint": "cdde6f6e325d03d5",
+      "interactive_elements": [
+        "el_1:a:Gmail",
+        "el_2:a:Skip to main content",
+        "el_3:a:\u5de5\u4f5c\u7528\u9014",
+        "el_4:a:\u767b\u5165",
+        "el_5:summary:\u5efa\u7acb\u5e33\u6236",
+        "el_6:menuitem:\u500b\u4eba\u7528\u9014",
+        "el_7:menuitem:\u5de5\u4f5c\u6216\u5546\u696d\u7528\u9014",
+        "el_8:summary:\u5efa\u7acb\u5e33\u6236",
+        "el_12:a:Google AI Pro \u6216 Ultra \u65b9\u6848",
+        "el_13:a:Google Workspace \u65b9\u6848",
+        "el_14:a:Gemini \u7248 Gmail",
+        "el_15:a:",
+        "el_16:a:",
+        "el_17:a:\u4f01\u696d",
+        "el_18:a:\u77ad\u89e3\u8a73\u60c5",
+        "el_19:button:\u5168\u90e8\u5c55\u958b",
+        "el_20:a:\u77ad\u89e3\u8a73\u60c5",
+        "el_21:a:\u77ad\u89e3\u8a73\u60c5",
+        "el_22:a:\u8aaa\u660e\u4e2d\u5fc3",
+        "el_27:a:Blog"
+      ],
+      "screenshot": "agent_output/screenshots/state_002.png"
+    },
+    {
+      "id": "state_003",
+      "url": "https://workspace.google.com/intl/zh-TW/products/gmail/?from=gafb-gmail_asw-def-globalnav-TW",
+      "title": "Gmail\uff1a\u79c1\u5bc6\u5b89\u5168\u7684\u500b\u4eba/\u4f01\u696d\u96fb\u5b50\u90f5\u4ef6\u670d\u52d9 | Google Workspace",
+      "state_fingerprint": "8e58a4e41539cd4c",
+      "interactive_elements": [
+        "el_1:a:",
+        "el_2:a:Skip to main content",
+        "el_3:summary:\u89e3\u6c7a\u65b9\u6848",
+        "el_4:button:close",
+        "el_5:a:\u7e3d\u89bdGoogle Workspace Individual",
+        "el_6:a:\u7e3d\u89bdGoogle Workspace Business",
+        "el_7:a:\u5c0f\u578b\u4f01\u696d\u5c0f\u578b\u4f01\u696d\u6548\u7387\u63d0\u5347\u5de5\u5177",
+        "el_8:a:\u65b0\u5275\u4f01\u696d\u65b0\u5275\u4f01\u696d\u5c08\u7528\u5de5\u5177",
+        "el_9:a:\u65b0\u5275\u516c\u53f8\u65b0\u5275\u516c\u53f8\u6548\u7387\u63d0\u5347\u5de5\u5177",
+        "el_10:a:\u7e3d\u89bdGoogle Workspace Enterprise",
+        "el_11:a:\u7b2c\u4e00\u7dda\u54e1\u5de5\u7b2c\u4e00\u7dda\u54e1\u5de5\u4f7f\u7528 Google Workspace",
+        "el_12:a:Work Safer\u70ba\u6a5f\u69cb\u62b5\u79a6\u7db2\u8def\u653b\u64ca",
+        "el_13:summary:\u7522\u54c1",
+        "el_15:a:Gmail\u4f01\u696d\u5c08\u5c6c\u96fb\u5b50\u90f5\u4ef6",
+        "el_16:a:\u96f2\u7aef\u786c\u789f\u96f2\u7aef\u5132\u5b58\u7a7a\u9593",
+        "el_17:a:Meet\u8996\u8a0a\u6703\u8b70",
+        "el_18:a:Chat\u5718\u968a\u8a0a\u606f\u901a\u8a0a",
+        "el_19:a:\u65e5\u66c6\u5171\u7528\u65e5\u66c6",
+        "el_20:a:TasksTasks \u548c\u5de5\u4f5c\u6e05\u55ae",
+        "el_21:a:\u6587\u4ef6\u6587\u66f8\u8655\u7406"
+      ],
+      "screenshot": "agent_output/screenshots/state_003.png"
+    },
+    {
+      "id": "state_004",
+      "url": "chrome-error://chromewebdata/",
+      "title": "workspace.google.com",
+      "state_fingerprint": "f8108bd51f98add0",
+      "interactive_elements": [],
+      "screenshot": "agent_output/screenshots/state_004.png"
+    }
+  ],
+  "edges": [
+    {
+      "from": "state_001",
+      "to": "state_002",
+      "action": {
+        "type": "click",
+        "target": "el_1",
+        "description": "Clicking 'Gmail' navigates to a new page, revealing a new state and content."
+      }
+    },
+    {
+      "from": "state_002",
+      "to": "state_002",
+      "action": {
+        "type": "click",
+        "target": "el_1",
+        "description": "Clicking 'Gmail' likely navigates to the main Gmail interface, revealing a new meaningful state."
+      }
+    },
+    {
+      "from": "state_002",
+      "to": "state_002",
+      "action": {
+        "type": "click",
+        "target": "el_4",
+        "description": "Clicking the '\u767b\u5165' (Login) link likely navigates to a new state for user authentication, which is a meaningful navigation and not yet tried."
+      }
+    },
+    {
+      "from": "state_002",
+      "to": "state_003",
+      "action": {
+        "type": "click",
+        "target": "el_3",
+        "description": "Clicking the '\u5de5\u4f5c\u7528\u9014' (Work Use) link likely navigates to a new section or page, revealing new content and states, fitting the preference for navigation and meaningful section changes."
+      }
+    },
+    {
+      "from": "state_003",
+      "to": "state_004",
+      "action": {
+        "type": "click",
+        "target": "el_1",
+        "description": "Fallback after LLM failure: APIConnectionError: Connection error."
+      }
+    }
+  ]
+}
