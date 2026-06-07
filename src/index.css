@@ -1,0 +1,96 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  
+  --color-brand-surface: #18181b; /* zinc-900 */
+  --color-brand-surface-low: #09090b; /* zinc-950 */
+  --color-brand-surface-container: #27272a; /* zinc-800 */
+  --color-brand-surface-highest: #3f3f46; /* zinc-700 */
+  
+  --color-neutral-50: #fafafa;
+  --color-neutral-100: #f4f4f5;
+  --color-neutral-200: #e4e4e7;
+  --color-neutral-300: #d4d4d8;
+  --color-neutral-400: #a1a1aa;
+  --color-neutral-500: #71717a;
+  --color-neutral-600: #52525b;
+  --color-neutral-700: #3f3f46;
+  --color-neutral-800: #27272a;
+  --color-neutral-900: #18181b;
+  --color-neutral-950: #09090b;
+  
+  --color-primary-blue: #818cf8; /* indigo-400 */
+  --color-primary-blue-container: #4f46e5; /* indigo-600 */
+  --color-success-green: #10b981; /* emerald-500 */
+  --color-warning-amber: #f59e0b; /* amber-500 */
+  --color-error-red: #f43f5e; /* rose-500 */
+  --color-outline-gray: #27272a; /* zinc-800 */
+}
+
+/* Custom styles for Bento Grid theme aesthetic */
+.glass-panel {
+  background: rgba(24, 24, 27, 0.75);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(39, 39, 42, 0.7);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4), inset 0 1px 0px rgba(255, 255, 255, 0.05);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-panel:hover {
+  border-color: rgba(63, 63, 70, 0.9);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0px rgba(255, 255, 255, 0.08);
+}
+
+.ai-insight-panel {
+  background: rgba(99, 102, 241, 0.06);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(129, 140, 248, 0.25);
+  box-shadow: inset 0 0 20px rgba(255, 255, 255, 0.03);
+  border-radius: 1rem;
+}
+
+/* Hide scrollbars for dense terminal logging */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Custom progress bar animations and scanlines */
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+.animate-scanline {
+  animation: scanline 4s linear infinite;
+}
+
+.node-glow {
+  box-shadow: 0 0 15px rgba(173, 198, 255, 0.15);
+}
+
+.node-active-glow {
+  box-shadow: 0 0 20px rgba(78, 222, 163, 0.25);
+}
+
+/* SVG Line Animations */
+.svg-line-active {
+  stroke-dasharray: 6;
+  animation: dash 30s linear infinite;
+}
+
+@keyframes dash {
+  to {
+    stroke-dashoffset: -1000;
+  }
+}
+

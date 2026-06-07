@@ -1,0 +1,6 @@
+{
+  "name": "FlowGuard AI",
+  "description": "Autonomous QA dashboard, diagnostic test execution, test case generator, visual regression analyzer, and reports workspace.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
