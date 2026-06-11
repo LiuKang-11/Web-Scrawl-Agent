@@ -26,6 +26,22 @@ Key output is in `agent_output/`.
 3. Install dependencies: `pip install -r requirements.txt`
 4. Add any env variables to `.env` if needed
 
+Example `.env` for Gemini:
+
+```env
+GEMINI_API_KEY="your-gemini-api-key"
+GEMINI_MODEL="gemini-2.5-flash"
+TARGET_URL="https://google.com"
+```
+
+The prototype also supports OpenAI:
+
+```env
+OPENAI_API_KEY="sk-..."
+OPENAI_MODEL="gpt-4.1-mini"
+TARGET_URL="https://google.com"
+```
+
 ## Run
 
 `python main.py`
@@ -49,5 +65,3 @@ The process is:
 
 - Same URL but different content (modal open, different content snapshot)
 - Same URL and same content (dedupe as existing state)
-
-

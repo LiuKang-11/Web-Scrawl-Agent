@@ -31,6 +31,11 @@ try:
 except ImportError:
     OpenAI = None
 
+try:
+    from google import genai
+except ImportError:
+    genai = None
+
 
 # -----------------------------
 # Environment loading
@@ -212,6 +217,22 @@ def parse_json_response(content: str) -> Dict[str, Any]:
 
     return json.loads(content)
 
+def sanitize_error_message(message: str) -> str:
+    """Avoid persisting API-key fragments returned by provider errors."""
+    if not message:
+        return message
+    api_keys = [
+        os.getenv("OPENAI_API_KEY"),
+        os.getenv("GEMINI_API_KEY"),
+        os.getenv("GOOGLE_API_KEY"),
+    ]
+    for api_key in [key for key in api_keys if key]:
+        message = message.replace(api_key, "<redacted_api_key>")
+        if len(api_key) > 12:
+            message = message.replace(api_key[:8], "<redacted")
+            message = message.replace(api_key[-4:], "key>")
+    return message
+
 
 # -----------------------------
 # Page observation
@@ -351,12 +372,110 @@ def observe_page(page: Page, state_index: int) -> Tuple[StateNode, List[Interact
 
 class ActionSelector:
     def __init__(self, model: Optional[str] = None):
-        self.model = model or os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
+        self.model = (
+            model
+            or os.getenv("GEMINI_MODEL")
+            or os.getenv("OPENAI_MODEL")
+            or "gpt-4.1-mini"
+        )
+        self.provider = "gemini" if self.model.lower().startswith("gemini") else "openai"
         self.client = None
         self.last_error: Optional[str] = None
+
+        if self.provider == "gemini":
+            api_key = (
+                os.getenv("GEMINI_API_KEY")
+                or os.getenv("GOOGLE_API_KEY")
+                or os.getenv("OPENAI_API_KEY")
+            )
+            if not api_key:
+                self.last_error = (
+                    "GEMINI_API_KEY is not set. Falling back to heuristic actions."
+                )
+                print(f"[WARN] {self.last_error}")
+                return
+            if genai is None:
+                self.last_error = (
+                    "google-genai is not installed. Run: pip install -r requirements.txt"
+                )
+                print(f"[WARN] {self.last_error}")
+                return
+            if not os.getenv("GEMINI_API_KEY") and os.getenv("OPENAI_API_KEY"):
+                print(
+                    "[WARN] Using OPENAI_API_KEY as a Gemini key because the model is Gemini. "
+                    "Prefer renaming it to GEMINI_API_KEY."
+                )
+            self.client = genai.Client(api_key=api_key)
+            return
+
         api_key = os.getenv("OPENAI_API_KEY")
+        if api_key and not api_key.startswith("sk-"):
+            self.last_error = (
+                "OPENAI_API_KEY does not look like an OpenAI API key. "
+                "Expected a key starting with 'sk-'. Falling back to heuristic actions."
+            )
+            print(f"[WARN] {self.last_error}")
+            return
         if api_key and OpenAI is not None:
             self.client = OpenAI(api_key=api_key)
+
+    def _build_prompt(
+        self,
+        page_summary: Dict[str, Any],
+        remaining: List[InteractiveElement],
+        tried_action_ids: List[str],
+    ) -> Dict[str, Any]:
+        return {
+            "task": "Choose the single best next UI action to discover a new state in a web app.",
+            "rules": [
+                "Return valid JSON only.",
+                "Choose exactly one action.",
+                "Only select from the provided candidate elements.",
+                "Prefer navigation, tabs, drawers, modals, and meaningful section changes.",
+                "Avoid actions already tried in this state."
+            ],
+            "page": page_summary,
+            "tried_action_ids": tried_action_ids,
+            "candidates": describe_elements_for_llm(remaining),
+            "output_schema": {
+                "action": "click",
+                "target_id": "el_1",
+                "reason": "brief reason"
+            }
+        }
+
+    def _choose_with_gemini(self, prompt: Dict[str, Any]) -> Dict[str, Any]:
+        response = self.client.models.generate_content(
+            model=self.model,
+            contents=(
+                "You are a UI exploration planner. Return strict JSON only.\n\n"
+                + json.dumps(prompt)
+            ),
+            config={
+                "temperature": 0,
+                "response_mime_type": "application/json",
+            },
+        )
+        return parse_json_response(response.text)
+
+    def _choose_with_openai(self, prompt: Dict[str, Any]) -> Dict[str, Any]:
+        response = self.client.chat.completions.create(
+            model=self.model,
+            temperature=0,
+            response_format={"type": "json_object"},
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a UI exploration planner. Return strict JSON only."
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(prompt)
+                }
+            ]
+        )
+        content = response.choices[0].message.content.strip()
+        return parse_json_response(content)
 
     def choose_action(
         self,
@@ -379,50 +498,20 @@ class ActionSelector:
                 "reason": "Fallback heuristic: first untried visible interactive element."
             }
 
-        prompt = {
-            "task": "Choose the single best next UI action to discover a new state in a web app.",
-            "rules": [
-                "Return valid JSON only.",
-                "Choose exactly one action.",
-                "Only select from the provided candidate elements.",
-                "Prefer navigation, tabs, drawers, modals, and meaningful section changes.",
-                "Avoid actions already tried in this state."
-            ],
-            "page": page_summary,
-            "tried_action_ids": tried_action_ids,
-            "candidates": describe_elements_for_llm(remaining),
-            "output_schema": {
-                "action": "click",
-                "target_id": "el_1",
-                "reason": "brief reason"
-            }
-        }
+        prompt = self._build_prompt(page_summary, remaining, tried_action_ids)
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                temperature=0,
-                response_format={"type": "json_object"},
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a UI exploration planner. Return strict JSON only."
-                    },
-                    {
-                        "role": "user",
-                        "content": json.dumps(prompt)
-                    }
-                ]
-            )
-            content = response.choices[0].message.content.strip()
-            decision = parse_json_response(content)
+            if self.provider == "gemini":
+                decision = self._choose_with_gemini(prompt)
+            else:
+                decision = self._choose_with_openai(prompt)
             target_ids = {c.id for c in remaining}
             if decision.get("action") == "click" and decision.get("target_id") in target_ids:
                 return decision
-            self.last_error = f"LLM returned unusable decision: {content}"
+            self.last_error = f"LLM returned unusable decision: {decision}"
             print(f"[WARN] {self.last_error}")
         except Exception as e:
-            self.last_error = f"{type(e).__name__}: {e}"
+            self.last_error = sanitize_error_message(f"{type(e).__name__}: {e}")
             print(f"[WARN] LLM action selection failed: {self.last_error}")
 
         chosen = remaining[0]
