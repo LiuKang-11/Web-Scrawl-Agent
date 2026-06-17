@@ -26,6 +26,18 @@ Key output is in `agent_output/`.
 3. Install dependencies: `pip install -r requirements.txt`
 4. Add any env variables to `.env` if needed
 
+'''
+cd "/Users/liuzitang/Desktop/Side Projects/AutoTest/Web Agent/backend"
+
+python3 -m venv .venv
+source .venv/bin/activate
+
+pip install -r requirements.txt
+python -m playwright install chromium
+
+uvicorn server:app --reload --host 0.0.0.0 --port 8000
+'''
+
 Example `.env` for Gemini:
 
 ```env
