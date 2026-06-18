@@ -1,0 +1,127 @@
+{
+  "nodes": [
+    {
+      "id": "state_001",
+      "url": "https://www.google.com/",
+      "title": "Google",
+      "state_fingerprint": "031ad7c2bb5f5e5e",
+      "interactive_elements": [
+        "el_1:a:About",
+        "el_2:a:Store",
+        "el_3:a:Gmail",
+        "el_4:a:Images",
+        "el_5:button:Google apps",
+        "el_6:a:Sign in",
+        "el_7:a:.lnXdpd{max-height:100%;max-width:100%;object-fit:contain;object-position:center bottom;width:auto;vertical-align:bottom",
+        "el_8:button:Share",
+        "el_9:button:Add files and tools",
+        "el_10:button:Search by voice",
+        "el_11:button:Search by image",
+        "el_12:link:AI Mode",
+        "el_13:button:Google Search",
+        "el_14:button:I'm Feeling Lucky",
+        "el_15:a:Advertising",
+        "el_16:a:Business",
+        "el_17:a:How Search works",
+        "el_18:a:Build, create, and do more with AI tools from Google",
+        "el_19:a:Privacy",
+        "el_20:a:Terms"
+      ],
+      "screenshot": "outputs/screenshots/state_001.png"
+    },
+    {
+      "id": "state_002",
+      "url": "https://accounts.google.com/v3/signin/identifier?continue=https%3A%2F%2Fwww.google.com%2F&dsh=S-852630935%3A1781826204316638&ec=futura_exp_og_so_72776762_e&hl=en&passive=true&flowName=GlifWebSignIn&flowEntry=ServiceLogin&ifkv=AcDsRvwP6PwsDFiQJ5orbYR-LGijt999nN2CvqWwaq9NJmMLiA1R7DLd5k7bbcR8k4c6JkhVD4ILGg",
+      "title": "Sign in - Google Accounts",
+      "state_fingerprint": "d760799d33fcc692",
+      "interactive_elements": [
+        "el_1:button:Forgot email?",
+        "el_2:a:Learn more about using Guest mode",
+        "el_3:button:Next",
+        "el_4:button:Create account",
+        "el_5:a:Help",
+        "el_6:a:Privacy",
+        "el_7:a:Terms"
+      ],
+      "screenshot": "outputs/screenshots/state_002.png"
+    },
+    {
+      "id": "state_003",
+      "url": "https://accounts.google.com/signin/v2/usernamerecovery?continue=https%3A%2F%2Fwww.google.com%2F&dsh=S-852630935%3A1781826204316638&ec=futura_exp_og_so_72776762_e&flowEntry=ServiceLogin&flowName=GlifWebSignIn&hl=en&ifkv=AcDsRvx3JS-hY_zQF84Etm2h6qjJxBPj6ZrXIdx_LT4y0vB8dsGdUt88n8lpT2eSe7PZxcpcXswA",
+      "title": "Sign in - Google Accounts",
+      "state_fingerprint": "b36675d1ebdbfdc2",
+      "interactive_elements": [
+        "el_1:button:Next",
+        "el_2:a:Help",
+        "el_3:a:Privacy",
+        "el_4:a:Terms"
+      ],
+      "screenshot": "outputs/screenshots/state_003.png"
+    }
+  ],
+  "edges": [
+    {
+      "from": "state_001",
+      "to": "state_002",
+      "action": {
+        "type": "click",
+        "target": "el_6",
+        "description": "Clicking 'Sign in' typically leads to an authentication flow, which is a significant and distinct new state in a web application, often unlocking personalized features and content. This represents a meaningful navigation to a new section."
+      }
+    },
+    {
+      "from": "state_002",
+      "to": "state_002",
+      "action": {
+        "type": "click",
+        "target": "el_4",
+        "description": "Choosing 'Create account' initiates a completely new user journey and a significant section change, which is preferred for discovering new states."
+      }
+    },
+    {
+      "from": "state_002",
+      "to": "state_003",
+      "action": {
+        "type": "click",
+        "target": "el_1",
+        "description": "Clicking 'Forgot email?' is likely to initiate a new, distinct account recovery flow, representing a significant state change and exploration of an alternative path within the application."
+      }
+    },
+    {
+      "from": "state_003",
+      "to": "state_003",
+      "action": {
+        "type": "click",
+        "target": "el_1",
+        "description": "Clicking 'Next' is the primary action to advance through the sign-in/recovery flow, which is most likely to lead to a new, distinct state within the application's core user journey."
+      }
+    },
+    {
+      "from": "state_003",
+      "to": "state_003",
+      "action": {
+        "type": "click",
+        "target": "el_2",
+        "description": "Clicking 'Help' is likely to reveal context-specific information or alternative paths related to the sign-in/recovery process, leading to a new and relevant state for exploration."
+      }
+    },
+    {
+      "from": "state_003",
+      "to": "state_003",
+      "action": {
+        "type": "click",
+        "target": "el_3",
+        "description": "Clicking 'Privacy' will navigate to a new page, discovering a new state. It is a meaningful navigation link and has not been tried yet."
+      }
+    },
+    {
+      "from": "state_003",
+      "to": "state_003",
+      "action": {
+        "type": "click",
+        "target": "el_4",
+        "description": "Fallback after LLM failure: ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 5, model: gemini-2.5-flash\\nPlease retry in 3.819883041s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-2.5-flash', 'location': 'global'}, 'quotaValue': '5'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '3s'}]}}"
+      }
+    }
+  ]
+}

@@ -4,49 +4,33 @@
 
 This is a prototype for a web interaction and state exploration agent. The goal is to crawl a web page (or app) with automatic actions and capture UI states, building a graph of discovered states/transitions with screenshots + structured data.
 
-Key output is in `outputs/`.
+Key output is in `../outputs/`.
 
 ## Workflow
 
-![Workflow](agents/workflow.png)
+![Workflow](workflow.png)
 ## Files
 
 - `main.py`: primary entry point for the agent logic
-- `agents/`: agent prototype docs, media, and alternate entry point
-- `agents/Design Document.md`: architectural notes and design decisions
-- `agents/prototype_run_notes.md`: test notes and observations
+- `Design Document.md`: architectural notes and design decisions
+- `prototype_run_notes.md`: test notes and observations
 - `requirements.txt`: Python dependencies
 - `.env`: environment settings
-- `outputs/`: structured graph output and screenshots
-- `agents/workflow.png`: visual workflow illustration
+- `../outputs/`: structured graph output and screenshots
+- `workflow.png`: visual workflow illustration
 
 ## Setup
 
-1. Create Python virtual environment: `python3 -m venv .venv`
+1. Create Python virtual environment: `python -m venv .venv`
 2. Activate: `source .venv/bin/activate`
 3. Install dependencies: `pip install -r requirements.txt`
-4. Install Playwright browsers: `python3 -m playwright install chromium`
-5. Add any env variables to `.env.local` if needed
-
-Example `.env.local` for Gemini:
-
-```env
-GEMINI_API_KEY="your-gemini-api-key"
-GEMINI_MODEL="gemini-2.5-flash"
-TARGET_URL="https://google.com"
-```
-
-The prototype also supports OpenAI:
-
-```env
-OPENAI_API_KEY="sk-..."
-OPENAI_MODEL="gpt-4.1-mini"
-TARGET_URL="https://google.com"
-```
+4. Add any env variables to `.env` if needed
 
 ## Run
 
-`python3 main.py`
+From the project root:
+
+`python3 agents/main.py`
 
 Adjust parameters in `main.py` as needed for target URL, credentials, timeouts, etc.
 
@@ -61,7 +45,7 @@ The process is:
 5. Execute action via Playwright (click, fill, submit, navigate)
 6. Capture new state (graph node), detect duplicates via URL+content
 7. Continue until all reachable states or timeout
-8. Output graph JSON in `outputs/graph.json`, with nodes and edges
+8. Output graph JSON in `../outputs/graph.json`, with nodes and edges
 
 ### Edge cases handled
 

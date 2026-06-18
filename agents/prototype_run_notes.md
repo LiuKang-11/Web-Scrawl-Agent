@@ -29,5 +29,5 @@ python main.py
 ```
 
 Output:
-- `agent_output/graph.json`
-- `agent_output/screenshots/*.png`
+- `outputs/graph.json`
+- `outputs/screenshots/*.png`
