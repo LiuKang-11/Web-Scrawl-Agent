@@ -38,6 +38,8 @@ class ExploreRequest(BaseModel):
     login_url: Optional[str] = None
     max_states: int = 30
     strategy: str = "bfs"   # bfs | dfs
+    llm_rerank: bool = True
+    allow_external_links: bool = False
 
 
 class AnalyzeRequest(BaseModel):
@@ -66,6 +68,8 @@ async def _run_exploration(job_id: str, req: ExploreRequest):
             credentials=creds,
             max_states=req.max_states,
             strategy=req.strategy,
+            llm_rerank=req.llm_rerank,
+            allow_external_links=req.allow_external_links,
         )
         graph = await explorer.explore()
         jobs[job_id]["status"] = "done"
