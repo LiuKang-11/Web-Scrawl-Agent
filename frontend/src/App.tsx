@@ -8,6 +8,7 @@ import TestCasesView from './components/TestCasesView';
 import TestExecutionView from './components/TestExecutionView';
 import FailureAnalysisView from './components/FailureAnalysisView';
 import ReportsView from './components/ReportsView';
+import HelpCenterView from './components/HelpCenterView';
 import { Info, Sparkles, X, Check, Loader2 } from 'lucide-react';
 
 export default function App() {
@@ -76,6 +77,10 @@ export default function App() {
         publicUrl={publicUrl}
         setPublicUrl={setPublicUrl}
         onNewTestSuite={handleNewTestSuiteCreation}
+        onHelpCenter={() => {
+          setActiveTab('Help Center');
+          setSearchText('');
+        }}
       />
 
       {/* Main Command Workspace */}
@@ -111,6 +116,10 @@ export default function App() {
           activeTab={activeTab}
           onSearch={setSearchText}
           isAnalyzing={false}
+          onHelpCenter={() => {
+            setActiveTab('Help Center');
+            setSearchText('');
+          }}
         />
 
         {/* Active main workspace viewport renderer */}
@@ -161,6 +170,10 @@ export default function App() {
               searchText={searchText}
               onSetStatusText={(msg) => notify(msg, 'info')}
             />
+          )}
+
+          {activeTab === 'Help Center' && (
+            <HelpCenterView searchText={searchText} />
           )}
 
         </main>

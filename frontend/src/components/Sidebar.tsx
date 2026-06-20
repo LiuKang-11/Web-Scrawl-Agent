@@ -25,6 +25,7 @@ interface SidebarProps {
   publicUrl: string;
   setPublicUrl: (url: string) => void;
   onNewTestSuite?: () => void;
+  onHelpCenter?: () => void;
   sidebarCollapsed?: boolean;
 }
 
@@ -36,6 +37,7 @@ export default function Sidebar({
   publicUrl,
   setPublicUrl,
   onNewTestSuite,
+  onHelpCenter,
   sidebarCollapsed = false
 }: SidebarProps) {
   
@@ -189,10 +191,21 @@ export default function Sidebar({
 
         {/* Footer Actions */}
         <div className="px-3 border-t border-zinc-850 pt-3 space-y-1">
-          <a href="#help" className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-zinc-400 hover:bg-zinc-900 hover:text-white transition-all text-xs font-medium">
+          <button
+            type="button"
+            onClick={() => {
+              if (onHelpCenter) onHelpCenter();
+              else setActiveTab('Help Center');
+            }}
+            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all text-xs font-medium cursor-pointer ${
+              activeTab === 'Help Center'
+                ? 'bg-indigo-500/10 text-indigo-400'
+                : 'text-zinc-400 hover:bg-zinc-900 hover:text-white'
+            }`}
+          >
             <HelpCircle className="w-4 h-4 text-zinc-400" />
             <span>Help Center</span>
-          </a>
+          </button>
           <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-zinc-400 hover:bg-zinc-900 hover:text-rose-400 transition-all text-xs font-medium cursor-pointer">
             <LogOut className="w-4 h-4 text-zinc-400" />
             <span>Sign Out</span>
