@@ -1,4 +1,4 @@
-export type TabType = 'Dashboard' | 'App Explorer' | 'Test Cases' | 'Test Execution' | 'Failure Analysis' | 'Reports';
+export type TabType = 'Dashboard' | 'App Explorer' | 'Test Cases' | 'Test Execution' | 'Failure Analysis' | 'Reports' | 'Help Center';
 
 export type TestingSourceType = 'Public URL' | 'Localhost' | 'GitHub Repo';
 

@@ -6,12 +6,14 @@ interface HeaderProps {
   activeTab: TabType;
   onSearch: (query: string) => void;
   isAnalyzing?: boolean;
+  onHelpCenter?: () => void;
 }
 
 export default function Header({
   activeTab,
   onSearch,
-  isAnalyzing = false
+  isAnalyzing = false,
+  onHelpCenter
 }: HeaderProps) {
   const [searchQuery, setSearchQuery] = React.useState('');
   const [showNotifications, setShowNotifications] = React.useState(false);
@@ -104,7 +106,16 @@ export default function Header({
         </div>
 
         {/* Help Circle */}
-        <button className="text-zinc-400 hover:text-indigo-400 hover:bg-zinc-900 p-2 rounded-full cursor-pointer">
+        <button
+          type="button"
+          onClick={onHelpCenter}
+          className={`p-2 rounded-full cursor-pointer transition-colors ${
+            activeTab === 'Help Center'
+              ? 'text-indigo-400 bg-zinc-900'
+              : 'text-zinc-400 hover:text-indigo-400 hover:bg-zinc-900'
+          }`}
+          aria-label="Open Help Center"
+        >
           <HelpCircle className="w-4 h-4" />
         </button>
 
