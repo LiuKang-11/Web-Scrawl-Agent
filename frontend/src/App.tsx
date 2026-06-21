@@ -13,7 +13,11 @@ import { Info, Sparkles, X, Check, Loader2 } from 'lucide-react';
 
 export default function App() {
 
-  const [isDarkMode, setIsDarkMode] = useState(true);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const savedTheme = window.localStorage.getItem('flowguard-theme');
+    if (savedTheme) return savedTheme === 'dark';
+    return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? true;
+  });
   
   // Tab view controller state
   const [activeTab, setActiveTab] = useState<TabType>('Dashboard');
@@ -55,6 +59,13 @@ export default function App() {
     notify('Welcome to FlowGuard AI. Autonomous crawler walkthrough session loaded successfully.', 'info');
   }, []);
 
+  useEffect(() => {
+    const theme = isDarkMode ? 'dark' : 'light';
+    window.localStorage.setItem('flowguard-theme', theme);
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.classList.toggle('dark', isDarkMode);
+  }, [isDarkMode]);
+
   // When user selects elements from TestCase to execute
   const handleRunSelectedTests = (selectedIds: string[]) => {
     setRunningTestIds(selectedIds);
@@ -68,11 +79,11 @@ export default function App() {
   };
 
   return (
-    <div className={`flex h-screen font-sans overflow-hidden select-none ${
-  isDarkMode
-    ? 'bg-zinc-950 text-zinc-100'
-    : 'bg-zinc-100 text-zinc-950'
-}`}>
+    <div className={`flex h-screen font-sans overflow-hidden select-none transition-colors ${
+      isDarkMode
+        ? 'bg-zinc-950 text-zinc-100'
+        : 'bg-zinc-100 text-zinc-950'
+    }`}>
       
       {/* Side Navigation Rail Panel */}
       <Sidebar 
@@ -82,6 +93,7 @@ export default function App() {
         setTestingSource={setTestingSource}
         publicUrl={publicUrl}
         setPublicUrl={setPublicUrl}
+        isDarkMode={isDarkMode}
         onNewTestSuite={handleNewTestSuiteCreation}
         onHelpCenter={() => {
           setActiveTab('Help Center');
@@ -137,7 +149,9 @@ export default function App() {
   }}
 />
         {/* Active main workspace viewport renderer */}
-        <main className="flex-1 overflow-hidden flex flex-col bg-zinc-950/40">
+        <main className={`flex-1 overflow-hidden flex flex-col transition-colors ${
+          isDarkMode ? 'bg-zinc-950/40' : 'bg-zinc-100'
+        }`}>
           
           {activeTab === 'Dashboard' && (
             <DashboardView 
