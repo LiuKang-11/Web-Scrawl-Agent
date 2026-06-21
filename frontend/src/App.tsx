@@ -12,6 +12,8 @@ import HelpCenterView from './components/HelpCenterView';
 import { Info, Sparkles, X, Check, Loader2 } from 'lucide-react';
 
 export default function App() {
+
+  const [isDarkMode, setIsDarkMode] = useState(true);
   
   // Tab view controller state
   const [activeTab, setActiveTab] = useState<TabType>('Dashboard');
@@ -66,7 +68,11 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-screen bg-zinc-950 font-sans text-zinc-100 overflow-hidden select-none">
+    <div className={`flex h-screen font-sans overflow-hidden select-none ${
+  isDarkMode
+    ? 'bg-zinc-950 text-zinc-100'
+    : 'bg-zinc-100 text-zinc-950'
+}`}>
       
       {/* Side Navigation Rail Panel */}
       <Sidebar 
@@ -112,16 +118,24 @@ export default function App() {
         )}
 
         {/* Global Toolbar and Profile controls */}
-        <Header 
-          activeTab={activeTab}
-          onSearch={setSearchText}
-          isAnalyzing={false}
-          onHelpCenter={() => {
-            setActiveTab('Help Center');
-            setSearchText('');
-          }}
-        />
+        
+        
 
+        
+        
+        
+    
+        <Header 
+  activeTab={activeTab}
+  onSearch={setSearchText}
+  isAnalyzing={false}
+  isDarkMode={isDarkMode}
+  setIsDarkMode={setIsDarkMode}
+  onHelpCenter={() => {
+    setActiveTab('Help Center');
+    setSearchText('');
+  }}
+/>
         {/* Active main workspace viewport renderer */}
         <main className="flex-1 overflow-hidden flex flex-col bg-zinc-950/40">
           
