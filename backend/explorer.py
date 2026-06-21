@@ -70,6 +70,8 @@ class WebExplorer:
         target_url: str,
         credentials: dict = None,
         max_states: int = 50,
+        max_depth: int = 1,
+        max_actions_per_state: int = 40,
         strategy: str = "bfs",   # "bfs" or "dfs"
         headless: bool = True,
         llm_rerank: bool = True,
@@ -78,6 +80,8 @@ class WebExplorer:
         self.target_url = target_url
         self.credentials = credentials or {}
         self.max_states = max_states
+        self.max_depth = max(0, max_depth)
+        self.max_actions_per_state = max(1, max_actions_per_state)
         self.strategy = strategy
         self.headless = headless
         self.llm_rerank = llm_rerank
@@ -127,10 +131,11 @@ class WebExplorer:
                 parent = self.states[item.parent_state_id]
                 target_id = await self._explore_frontier_item(context, parent, item)
 
+                path = item.path_to_parent + [item.action]
                 if target_id and target_id not in self._state_paths:
-                    path = item.path_to_parent + [item.action]
                     self._state_paths[target_id] = path
-                    self._expand_frontier(frontier, self.states[target_id], path)
+                    if len(path) < self.max_depth:
+                        self._expand_frontier(frontier, self.states[target_id], path)
 
             await browser.close()
 
@@ -141,6 +146,7 @@ class WebExplorer:
     # ------------------------------------------------------------------ #
 
     async def _capture_state(self, page: Page, state_id: str) -> State:
+        await self._prepare_page_for_scan(page)
         url = page.url
         title = await page.title()
         elements = await self._get_elements(page)
@@ -166,7 +172,7 @@ class WebExplorer:
         )
 
     async def _get_elements(self, page: Page) -> list:
-        return await page.evaluate("""() => {
+        return await page.evaluate("""(limit) => {
             const sel = [
                 'button',
                 'a[href]',
@@ -207,7 +213,7 @@ class WebExplorer:
 
             return [...document.querySelectorAll(sel)]
                 .filter(isVisible)
-                .slice(0, 40)
+                .slice(0, limit)
                 .map((el, idx) => {
                     const tag = el.tagName.toLowerCase();
                     const text = getText(el).slice(0, 80);
@@ -241,7 +247,28 @@ class WebExplorer:
                         visible: true,
                     };
                 });
-        }""")
+        }""", self.max_actions_per_state)
+
+    async def _prepare_page_for_scan(self, page: Page) -> None:
+        try:
+            await page.evaluate("""async () => {
+                const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+                const step = Math.max(window.innerHeight * 0.8, 400);
+                const maxY = Math.max(
+                    document.body?.scrollHeight || 0,
+                    document.documentElement?.scrollHeight || 0
+                );
+
+                for (let y = 0; y < maxY; y += step) {
+                    window.scrollTo(0, y);
+                    await delay(80);
+                }
+
+                window.scrollTo(0, 0);
+                await delay(120);
+            }""")
+        except Exception:
+            pass
 
     async def _get_modal(self, page: Page) -> Optional[str]:
         el = await page.query_selector('[role="dialog"],[aria-modal="true"],.modal')
@@ -371,6 +398,9 @@ class WebExplorer:
         self.visited_fingerprints[s.dom_fingerprint] = s.state_id
 
     def _expand_frontier(self, frontier: list[FrontierItem], state: State, path: list):
+        if len(path) >= self.max_depth:
+            return
+
         actions = []
         for elem in state.interactive_elements:
             action = dict(elem)
@@ -401,7 +431,7 @@ class WebExplorer:
 
         actions = self._llm_rerank_actions(state, actions)
 
-        for action in actions[:10]:
+        for action in actions[:self.max_actions_per_state]:
             self._scheduled_actions.add((state.state_id, action["action_key"]))
             self._frontier_order += 1
             depth_penalty = len(path) * 0.05
@@ -682,6 +712,8 @@ class WebExplorer:
             "stats": {
                 "total_states": len(self.states),
                 "total_transitions": len(self.transitions),
+                "max_depth": self.max_depth,
+                "max_actions_per_state": self.max_actions_per_state,
                 "filtered_actions": len(self.filtered_actions),
                 "filtered_action_details": self.filtered_actions[:20],
                 "success_rate": round(
@@ -705,6 +737,8 @@ if __name__ == "__main__":
     parser.add_argument("--password", default="")
     parser.add_argument("--login-url", default="")
     parser.add_argument("--max-states", type=int, default=30)
+    parser.add_argument("--max-depth", type=int, default=1)
+    parser.add_argument("--max-actions-per-state", type=int, default=40)
     parser.add_argument("--strategy", choices=["bfs", "dfs"], default="bfs")
     parser.add_argument("--headed", action="store_true")
     parser.add_argument("--output", default="graph.json")
@@ -724,6 +758,8 @@ if __name__ == "__main__":
         args.url,
         credentials=creds,
         max_states=args.max_states,
+        max_depth=args.max_depth,
+        max_actions_per_state=args.max_actions_per_state,
         strategy=args.strategy,
         headless=not args.headed,
         llm_rerank=not args.no_llm_rerank,

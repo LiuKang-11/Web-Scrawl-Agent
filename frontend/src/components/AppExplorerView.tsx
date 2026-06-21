@@ -21,21 +21,254 @@ import {
   Search,
   FileCode,
   Lock,
-  Workflow
+  Workflow,
+  Play,
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
-import { DiscoveredNode, UserFlowPath } from '../types';
+import { getBackendHealth, getExplorationStatus, startExploration } from '../api';
+import { DiscoveredNode, ExplorerGraph, ExplorerNode, UserFlowPath } from '../types';
 
 interface AppExplorerViewProps {
   searchText: string;
+  publicUrl: string;
+  onSetStatusText?: (msg: string, type?: 'info' | 'success' | 'warn') => void;
 }
 
-export default function AppExplorerView({ searchText }: AppExplorerViewProps) {
+interface TopologyNode {
+  id: string;
+  label: string;
+  route?: string;
+  description?: string;
+  reachedBy?: string;
+  type: string;
+  x: number;
+  y: number;
+  status: 'Passed' | 'Failed' | 'Draft';
+  traffic: string;
+  latency: string;
+  tech: string;
+  activeApis: string[];
+  cookies: string[];
+  formsCount: number;
+  url?: string;
+  title?: string;
+  summary?: string;
+  screenshot?: string | null;
+  elements?: ExplorerNode['interactive_elements'];
+}
+
+function shortRoute(url: string) {
+  try {
+    const parsed = new URL(url);
+    return parsed.pathname === '/' ? '/' : parsed.pathname;
+  } catch {
+    return url || 'Unknown';
+  }
+}
+
+function titleCase(value: string) {
+  return value
+    .replace(/[-_]+/g, ' ')
+    .replace(/\b\w/g, letter => letter.toUpperCase());
+}
+
+function cleanActionText(value?: string) {
+  const text = (value || '').replace(/^FAILED:\s*/i, '').trim();
+  if (!text) return 'Loaded directly';
+
+  const quoted = text.match(/'([^']+)'/);
+  if (quoted?.[1]) return `Clicked "${quoted[1]}"`;
+
+  return text
+    .replace(/^Click\s+/i, 'Clicked ')
+    .replace(/\s+\(score=.*?\)$/i, '')
+    .trim();
+}
+
+function humanPageName(url: string, title: string, stateId: string, index: number) {
+  const route = shortRoute(url);
+  const normalizedRoute = route.toLowerCase().replace(/\/+$/, '') || '/';
+  const normalizedTitle = (title || '').trim();
+
+  if (index === 0) return 'Start page';
+  if (normalizedRoute === '/') {
+    return normalizedTitle && normalizedTitle.length < 32 ? normalizedTitle : 'Home page';
+  }
+  if (normalizedRoute.includes('login') || normalizedRoute.includes('signin')) return 'Login page';
+  if (normalizedRoute.includes('reg') || normalizedRoute.includes('signup') || normalizedRoute.includes('register')) return 'Registration page';
+  if (normalizedRoute.includes('create') || normalizedRoute.includes('new')) return 'Create page';
+  if (normalizedRoute.includes('profile') || normalizedRoute.includes('account')) return 'Account page';
+  if (normalizedRoute.includes('checkout')) return 'Checkout page';
+  if (normalizedRoute.includes('cart')) return 'Cart page';
+  if (normalizedRoute.includes('search')) return 'Search results';
+
+  const lastSegment = normalizedRoute.split('/').filter(Boolean).pop()?.replace(/\.(php|html?)$/i, '');
+  return lastSegment ? `${titleCase(lastSegment)} page` : `State ${stateId}`;
+}
+
+function buildLiveTopology(graph: ExplorerGraph | null) {
+  if (!graph?.nodes?.length) return null;
+
+  const centerX = 325;
+  const centerY = 180;
+  const radiusX = graph.nodes.length > 2 ? 220 : 130;
+  const radiusY = graph.nodes.length > 2 ? 120 : 70;
+  const failedStates = new Set(graph.edges.filter(edge => !edge.success).map(edge => edge.from_state));
+  const incomingActionByState = new Map(
+    graph.edges.map(edge => [edge.to_state, cleanActionText(edge.action_description)])
+  );
+
+  const nodes: TopologyNode[] = graph.nodes.map((node, index) => {
+    const angle = graph.nodes.length === 1 ? 0 : (Math.PI * 2 * index) / graph.nodes.length - Math.PI / 2;
+    const requests = node.backend_requests || [];
+    const route = shortRoute(node.url);
+    const label = humanPageName(node.url, node.title, node.state_id, index);
+    const formCount = (node.interactive_elements || []).filter(el =>
+      ['input', 'select', 'textarea'].includes(el.tag || '')
+    ).length;
+
+    return {
+      id: node.state_id,
+      label,
+      route,
+      description: index === 0
+        ? 'The origin page where the crawl started.'
+        : `${label} discovered after ${incomingActionByState.get(node.state_id) || 'an origin-page action'}.`,
+      reachedBy: incomingActionByState.get(node.state_id) || 'Initial load',
+      type: 'Page',
+      x: Math.round(centerX + Math.cos(angle) * radiusX),
+      y: Math.round(centerY + Math.sin(angle) * radiusY),
+      status: failedStates.has(node.state_id) ? 'Failed' : 'Passed',
+      traffic: `${requests.length} API calls`,
+      latency: `${Math.max(1, (node.interactive_elements || []).length)} actions`,
+      tech: node.title || 'Browser state',
+      activeApis: requests.map(req => {
+        try {
+          const parsed = new URL(req.url);
+          return `${req.method} ${parsed.pathname}`;
+        } catch {
+          return `${req.method} ${req.url}`;
+        }
+      }),
+      cookies: [node.dom_fingerprint.slice(0, 8), node.state_id],
+      formsCount: formCount,
+      url: node.url,
+      title: node.title,
+      summary: node.page_summary,
+      screenshot: node.screenshot_b64 || null,
+      elements: node.interactive_elements || [],
+    };
+  });
+
+  const discoveredPages: DiscoveredNode[] = graph.nodes.map(node => ({
+    id: node.state_id,
+    label: humanPageName(node.url, node.title, node.state_id, graph.nodes.indexOf(node)),
+    type: 'Page',
+    status: failedStates.has(node.state_id) ? 'Failed' : 'Passed',
+    endpoint: shortRoute(node.url),
+  }));
+
+  const detectedForms: DiscoveredNode[] = graph.nodes.flatMap(node =>
+    (node.interactive_elements || [])
+      .filter(el => ['input', 'select', 'textarea'].includes(el.tag || ''))
+      .map((el, index) => ({
+        id: `${node.state_id}_form_${index}`,
+        label: el.name || el.id || el.text || `${el.tag} field`,
+        type: 'Form' as const,
+        endpoint: shortRoute(node.url),
+      }))
+  );
+
+  const apiEndpoints: DiscoveredNode[] = graph.nodes.flatMap(node =>
+    (node.backend_requests || []).map((req, index) => ({
+      id: `${node.state_id}_api_${index}`,
+      label: shortRoute(req.url),
+      type: 'API' as const,
+      endpoint: req.method,
+    }))
+  );
+
+  const links = graph.edges.map(edge => ({
+    sourceId: edge.from_state,
+    targetId: edge.to_state,
+    success: edge.success,
+  }));
+
+  const nodeLabelById = new Map(nodes.map(node => [node.id, node.label]));
+  const userPaths: UserFlowPath[] = graph.edges.slice(0, 6).map((edge, index) => ({
+    id: `path_${index}`,
+    name: cleanActionText(edge.action_description),
+    risk: edge.success ? 'Low Risk' : 'High Risk',
+    steps: `${nodeLabelById.get(edge.from_state) || edge.from_state} → ${nodeLabelById.get(edge.to_state) || edge.to_state}`,
+  }));
+
+  return { nodes, discoveredPages, detectedForms, apiEndpoints, links, userPaths };
+}
+
+export default function AppExplorerView({ searchText, publicUrl, onSetStatusText }: AppExplorerViewProps) {
   // Interactive selected node state
   const [selectedNodeId, setSelectedNodeId] = React.useState<string>('home');
   const [activeTabSub, setActiveTabSub] = React.useState<'pages' | 'forms' | 'apis'>('pages');
+  const [backendOnline, setBackendOnline] = React.useState<boolean | null>(null);
+  const [jobId, setJobId] = React.useState<string | null>(null);
+  const [crawlStatus, setCrawlStatus] = React.useState<'idle' | 'queued' | 'running' | 'done' | 'error'>('idle');
+  const [crawlProgress, setCrawlProgress] = React.useState('Ready to crawl');
+  const [crawlError, setCrawlError] = React.useState<string | null>(null);
+  const [liveGraph, setLiveGraph] = React.useState<ExplorerGraph | null>(null);
+
+  React.useEffect(() => {
+    getBackendHealth()
+      .then(() => setBackendOnline(true))
+      .catch(() => setBackendOnline(false));
+  }, []);
+
+  React.useEffect(() => {
+    if (!jobId || crawlStatus === 'done' || crawlStatus === 'error') return;
+
+    const timer = window.setInterval(async () => {
+      try {
+        const status = await getExplorationStatus(jobId);
+        setCrawlStatus(status.status);
+        setCrawlProgress(status.progress || status.status);
+        if (status.status === 'done' && status.graph) {
+          setLiveGraph(status.graph);
+          setSelectedNodeId(status.graph.nodes[0]?.state_id || 'home');
+          onSetStatusText?.(`Crawl completed: ${status.graph.stats.total_states} states discovered.`, 'success');
+        }
+        if (status.status === 'error') {
+          setCrawlError(status.error || 'Crawl failed');
+          onSetStatusText?.(status.error || 'Crawl failed.', 'warn');
+        }
+      } catch (error) {
+        setCrawlStatus('error');
+        setCrawlError(error instanceof Error ? error.message : 'Unable to poll crawler status');
+      }
+    }, 1500);
+
+    return () => window.clearInterval(timer);
+  }, [crawlStatus, jobId, onSetStatusText]);
+
+  const handleStartCrawl = async () => {
+    setCrawlError(null);
+    setCrawlStatus('queued');
+    setCrawlProgress('Queued');
+    try {
+      const job = await startExploration(publicUrl);
+      setJobId(job.job_id);
+      setCrawlProgress('Crawler job created');
+      onSetStatusText?.(`Started crawler for ${publicUrl}`, 'info');
+    } catch (error) {
+      setCrawlStatus('error');
+      setCrawlError(error instanceof Error ? error.message : 'Unable to start crawler');
+      onSetStatusText?.('Could not reach the backend crawler.', 'warn');
+    }
+  };
+
+  const liveTopology = React.useMemo(() => buildLiveTopology(liveGraph), [liveGraph]);
 
   // Interactive nodes representing graph with enriched telemetry metrics
-  const nodes = [
+  const fallbackNodes: TopologyNode[] = [
     { 
       id: 'home', 
       label: 'Home Feed', 
@@ -109,7 +342,7 @@ export default function AppExplorerView({ searchText }: AppExplorerViewProps) {
   ];
 
   // Discovered list details
-  const discoveredPages: DiscoveredNode[] = [
+  const fallbackDiscoveredPages: DiscoveredNode[] = [
     { id: 'home', label: '/', type: 'Page', status: 'Passed' },
     { id: 'login', label: '/login', type: 'Page', status: 'Passed' },
     { id: 'products', label: '/products', type: 'Page', status: 'Passed' },
@@ -118,33 +351,40 @@ export default function AppExplorerView({ searchText }: AppExplorerViewProps) {
     { id: 'profile', label: '/profile', type: 'Page', status: 'Draft' },
   ];
 
-  const detectedForms: DiscoveredNode[] = [
+  const fallbackDetectedForms: DiscoveredNode[] = [
     { id: 'login_form', label: 'LoginForm', type: 'Form', endpoint: 'POST /api/auth' },
     { id: 'payment_form', label: 'CheckoutPaymentForm', type: 'Form', endpoint: 'POST /api/checkout/pay' },
     { id: 'search_form', label: 'ProductSearchQuery', type: 'Form', endpoint: 'GET /api/search' }
   ];
 
-  const apiEndpoints: DiscoveredNode[] = [
+  const fallbackApiEndpoints: DiscoveredNode[] = [
     { id: 'api_auth', label: '/api/auth/username', type: 'API', endpoint: 'GET verify' },
     { id: 'api_inv', label: '/api/products/inventory', type: 'API', endpoint: 'GET count' },
     { id: 'api_stripe', label: '/api/checkout/stripe-intent', type: 'API', endpoint: 'POST create' },
     { id: 'api_logs', label: '/api/telemetry/errors', type: 'API', endpoint: 'POST log' }
   ];
 
-  const userPaths: UserFlowPath[] = [
+  const fallbackUserPaths: UserFlowPath[] = [
     { id: 'p1', name: 'Standard Auth Funnel', risk: 'High Risk', steps: 'home → login → products → checkout' },
     { id: 'p2', name: 'Direct Guest Checkout', risk: 'Low Risk', steps: 'home → products → cart → checkout' },
     { id: 'p3', name: 'Quick Subscription Path', risk: 'Medium Risk', steps: 'login → checkout' }
   ];
 
   // Node relationships for drawing lines
-  const links = [
+  const fallbackLinks = [
     { sourceId: 'home', targetId: 'login' },
     { sourceId: 'home', targetId: 'products' },
     { sourceId: 'login', targetId: 'checkout' },
     { sourceId: 'products', targetId: 'cart' },
     { sourceId: 'cart', targetId: 'checkout' }
   ];
+
+  const nodes = liveTopology?.nodes || fallbackNodes;
+  const discoveredPages = liveTopology?.discoveredPages || fallbackDiscoveredPages;
+  const detectedForms = liveTopology?.detectedForms || fallbackDetectedForms;
+  const apiEndpoints = liveTopology?.apiEndpoints || fallbackApiEndpoints;
+  const userPaths = liveTopology?.userPaths?.length ? liveTopology.userPaths : fallbackUserPaths;
+  const links = liveTopology?.links?.length ? liveTopology.links : fallbackLinks;
 
   const selectedNode = nodes.find(n => n.id === selectedNodeId) || nodes[0];
 
@@ -191,23 +431,51 @@ export default function AppExplorerView({ searchText }: AppExplorerViewProps) {
               <Cpu className="w-3 h-3 text-indigo-400" />
               Live Discovery State Space
             </span>
-            <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest flex items-center gap-1">
-              ● Crawl Active
+            <span className={`border px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest flex items-center gap-1 ${
+              backendOnline
+                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                : backendOnline === false
+                  ? 'bg-red-500/10 text-red-400 border-red-500/20'
+                  : 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'
+            }`}>
+              ● {backendOnline ? 'Backend Online' : backendOnline === false ? 'Backend Offline' : 'Checking Backend'}
+            </span>
+            <span className="bg-zinc-500/10 text-zinc-300 border border-zinc-700 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest flex items-center gap-1">
+              {crawlStatus}
             </span>
           </div>
           <h1 className="text-xl font-bold text-zinc-100 tracking-tight font-display">
             Autonomous State Space &amp; Site Topology
           </h1>
           <p className="text-xs text-zinc-400">
-            Interactive crawler map tracing path transitions, endpoints, and input form boundaries mapped automatically by agent scripts during the walkthroughs.
+            Interactive crawler map tracing path transitions, endpoints, and input form boundaries for <span className="font-mono text-indigo-300">{publicUrl}</span>.
           </p>
+          {crawlError && (
+            <p className="text-[11px] text-rose-300 font-mono">{crawlError}</p>
+          )}
         </div>
 
         <div className="flex items-center gap-3">
           <div className="text-right hidden sm:block">
-            <p className="text-[10px] text-zinc-500 font-bold uppercase font-mono tracking-widest">Discovered Nodes</p>
-            <p className="text-lg font-bold text-zinc-200 font-display">13 Endpoints</p>
+            <p className="text-[10px] text-zinc-500 font-bold uppercase font-mono tracking-widest">Discovered States</p>
+            <p className="text-lg font-bold text-zinc-200 font-display">{nodes.length} States</p>
+            <p className="text-[10px] text-zinc-500 font-mono">{crawlProgress}</p>
           </div>
+          <button
+            type="button"
+            onClick={handleStartCrawl}
+            disabled={crawlStatus === 'queued' || crawlStatus === 'running'}
+            className="h-10 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer disabled:cursor-not-allowed"
+          >
+            {crawlStatus === 'queued' || crawlStatus === 'running' ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : liveGraph ? (
+              <RefreshCw className="w-4 h-4" />
+            ) : (
+              <Play className="w-4 h-4" />
+            )}
+            {liveGraph ? 'Run Again' : 'Start Crawl'}
+          </button>
           <div className="w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 shadow-md">
             <Network className="w-5 h-5 text-indigo-400" />
           </div>
@@ -270,8 +538,8 @@ export default function AppExplorerView({ searchText }: AppExplorerViewProps) {
                 const dest = nodes.find(n => n.id === link.targetId);
                 if (!src || !dest) return null;
                 
-                // Highlight link dynamic status if any endpoint fails
-                const isFailedLink = src.id === 'checkout' || dest.id === 'checkout';
+                // Highlight failed transitions from the live crawler, or checkout risk in demo mode.
+                const isFailedLink = link.success === false || src.id === 'checkout' || dest.id === 'checkout';
                 const isActiveUserFlow = selectedNodeId === src.id || selectedNodeId === dest.id;
 
                 return (
@@ -307,6 +575,9 @@ export default function AppExplorerView({ searchText }: AppExplorerViewProps) {
               {nodes.map((node) => {
                 const isSelected = node.id === selectedNodeId;
                 const isFailed = node.status === 'Failed';
+                const routeLabel = node.route && node.route !== node.label ? node.route : '';
+                const tagWidth = Math.max(node.label.length * 7, routeLabel.length * 6) + 16;
+                const tagHeight = routeLabel ? 28 : 16;
                 
                 return (
                   <g 
@@ -345,10 +616,10 @@ export default function AppExplorerView({ searchText }: AppExplorerViewProps) {
                     {/* Node text tags on background shield to guarantee high-fidelity legibility */}
                     <g transform="translate(0, 32)">
                       <rect 
-                        x={-(node.label.length * 3.5) - 6} 
+                        x={-(tagWidth / 2)} 
                         y="-10" 
-                        width={(node.label.length * 7) + 12} 
-                        height="16" 
+                        width={tagWidth} 
+                        height={tagHeight} 
                         rx="4" 
                         className="fill-zinc-950/90 stroke stroke-zinc-800/60"
                         strokeWidth="1"
@@ -360,6 +631,15 @@ export default function AppExplorerView({ searchText }: AppExplorerViewProps) {
                       >
                         {node.label}
                       </text>
+                      {routeLabel && (
+                        <text
+                          textAnchor="middle"
+                          y="14"
+                          className="font-mono text-[8px] font-semibold fill-zinc-500 group-hover:fill-zinc-300 transition-colors pointer-events-none"
+                        >
+                          {routeLabel}
+                        </text>
+                      )}
                     </g>
                   </g>
                 );
@@ -375,7 +655,7 @@ export default function AppExplorerView({ searchText }: AppExplorerViewProps) {
           <div className="space-y-4">
             <div className="flex justify-between items-center pb-2.5 border-b border-zinc-800">
               <div>
-                <span className="text-[9px] text-zinc-500 font-mono font-extrabold uppercase tracking-widest block">TELEMETRY DETECTOR</span>
+                <span className="text-[9px] text-zinc-500 font-mono font-extrabold uppercase tracking-widest block">PAGE INSPECTOR</span>
                 <span className="text-sm font-bold text-zinc-100 font-display flex items-baseline gap-1.5 mt-0.5">
                   <span className="relative flex h-2 w-2">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ backgroundColor: selectedNode.status === 'Failed' ? '#ef4444' : '#10b981' }}></span>
@@ -415,10 +695,25 @@ export default function AppExplorerView({ searchText }: AppExplorerViewProps) {
             </div>
 
             {/* Framework Signal metadata */}
-            <div className="bg-zinc-950/40 p-3 rounded-xl border border-zinc-800 space-y-1 text-xs">
-              <div className="flex justify-between text-[11px] text-zinc-400">
-                <span className="flex items-center gap-1"><Cpu className="w-3.5 h-3.5 text-zinc-500" /> Technology:</span>
-                <span className="font-mono text-indigo-300 font-bold">{selectedNode.tech}</span>
+            <div className="bg-zinc-950/40 p-3 rounded-xl border border-zinc-800 space-y-2 text-xs">
+              <div className="space-y-1">
+                <span className="text-[9px] text-zinc-500 font-mono uppercase font-bold flex items-center gap-1">
+                  <Cpu className="w-3.5 h-3.5 text-zinc-500" />
+                  What this state means
+                </span>
+                <p className="text-[11px] text-zinc-300 leading-relaxed">
+                  {selectedNode.description || 'A page state discovered during the crawler walkthrough.'}
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-1 text-[10px] font-mono">
+                <div className="flex justify-between gap-3 text-zinc-500">
+                  <span>Route</span>
+                  <span className="text-indigo-300 truncate">{selectedNode.route || selectedNode.label}</span>
+                </div>
+                <div className="flex justify-between gap-3 text-zinc-500">
+                  <span>Reached by</span>
+                  <span className="text-zinc-300 truncate">{selectedNode.reachedBy || 'Demo flow'}</span>
+                </div>
               </div>
             </div>
 
@@ -510,7 +805,7 @@ export default function AppExplorerView({ searchText }: AppExplorerViewProps) {
                   Discovery Catalog Explorer
                 </h2>
                 <p className="text-[11px] text-zinc-400">
-                  Tabbed inventory of elements extracted recursively by the robot crawler.
+                  Human-readable inventory of states found from the starting page.
                 </p>
               </div>
 
