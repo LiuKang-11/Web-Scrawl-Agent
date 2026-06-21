@@ -1,6 +1,6 @@
 import React from 'react';
 import { TabType } from '../types';
-import { Search, Bell, HelpCircle, Check, Loader2 } from 'lucide-react';
+import { Search, Bell, HelpCircle, Loader2, Moon, Sun } from 'lucide-react';
 
 interface HeaderProps {
   activeTab: TabType;
@@ -44,11 +44,17 @@ export default function Header({
   const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
-    <header className="bg-zinc-950/80 border-b border-zinc-800 backdrop-blur-md flex justify-between items-center h-16 px-6 relative select-none">
+    <header className={`border-b backdrop-blur-md flex justify-between items-center h-16 px-6 relative select-none transition-colors ${
+      isDarkMode
+        ? 'bg-zinc-950/80 border-zinc-800'
+        : 'bg-white/85 border-zinc-200'
+    }`}>
       {/* Title / Tab Breadcrumb */}
       <div className="flex items-center gap-6">
-        <span className="text-sm font-semibold text-zinc-400 font-mono tracking-tight uppercase">
-          FlowGuard AI <span className="text-zinc-700 mx-1">/</span> <span className="text-indigo-400 capitalize font-display font-semibold tracking-normal">{activeTab}</span>
+        <span className={`text-sm font-semibold font-mono tracking-tight uppercase ${
+          isDarkMode ? 'text-zinc-400' : 'text-zinc-600'
+        }`}>
+          FlowGuard AI <span className={isDarkMode ? 'text-zinc-700 mx-1' : 'text-zinc-300 mx-1'}>/</span> <span className="text-indigo-500 capitalize font-display font-semibold tracking-normal">{activeTab}</span>
         </span>
         
         {isAnalyzing && (
@@ -62,20 +68,43 @@ export default function Header({
       {/* Global Actions Bar */}
       <div className="flex items-center gap-4">
         <button
+          type="button"
           onClick={() => setIsDarkMode(!isDarkMode)}
-          className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-900 hover:text-indigo-400 transition-colors"
+          className={`relative h-9 w-[74px] rounded-full border p-1 transition-all duration-300 cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-400/60 ${
+            isDarkMode
+              ? 'bg-zinc-900 border-zinc-700 shadow-inner shadow-black/40'
+              : 'bg-zinc-100 border-zinc-300 shadow-sm'
+          }`}
+          aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+          title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
         >
-          {isDarkMode ? 'Light Mode' : 'Dark Mode'}
+          <span className="absolute inset-0 flex items-center justify-between px-2">
+            <Moon className={`w-4 h-4 transition-colors ${isDarkMode ? 'text-indigo-300' : 'text-zinc-400'}`} />
+            <Sun className={`w-4 h-4 transition-colors ${isDarkMode ? 'text-zinc-500' : 'text-amber-500'}`} />
+          </span>
+          <span
+            className={`relative block h-7 w-7 rounded-full transition-transform duration-300 ${
+              isDarkMode
+                ? 'translate-x-0 bg-indigo-500 shadow-lg shadow-indigo-500/25'
+                : 'translate-x-[38px] bg-white shadow-md'
+            }`}
+          />
         </button>
         {/* Search */}
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 w-4 h-4" />
+          <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${
+            isDarkMode ? 'text-zinc-500' : 'text-zinc-400'
+          }`} />
           <input
             type="text"
             value={searchQuery}
             onChange={handleSearchChange}
             placeholder={`Search across ${activeTab.toLowerCase()}...`}
-            className="bg-zinc-900 border border-zinc-800 rounded-full py-1.5 pl-9 pr-4 text-xs text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 w-64 transition-all"
+            className={`border rounded-full py-1.5 pl-9 pr-4 text-xs focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 w-64 transition-all ${
+              isDarkMode
+                ? 'bg-zinc-900 border-zinc-800 text-zinc-100 placeholder:text-zinc-500'
+                : 'bg-white border-zinc-300 text-zinc-900 placeholder:text-zinc-400'
+            }`}
           />
         </div>
 
