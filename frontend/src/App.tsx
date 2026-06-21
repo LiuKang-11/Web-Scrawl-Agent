@@ -139,6 +139,8 @@ export default function App() {
           {activeTab === 'App Explorer' && (
             <AppExplorerView 
               searchText={searchText}
+              publicUrl={publicUrl}
+              onSetStatusText={(msg, type = 'info') => notify(msg, type)}
             />
           )}
 

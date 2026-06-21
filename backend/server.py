@@ -37,6 +37,8 @@ class ExploreRequest(BaseModel):
     password: Optional[str] = None
     login_url: Optional[str] = None
     max_states: int = 30
+    max_depth: int = 1
+    max_actions_per_state: int = 40
     strategy: str = "bfs"   # bfs | dfs
     llm_rerank: bool = True
     allow_external_links: bool = False
@@ -67,6 +69,8 @@ async def _run_exploration(job_id: str, req: ExploreRequest):
             target_url=req.target_url,
             credentials=creds,
             max_states=req.max_states,
+            max_depth=req.max_depth,
+            max_actions_per_state=req.max_actions_per_state,
             strategy=req.strategy,
             llm_rerank=req.llm_rerank,
             allow_external_links=req.allow_external_links,
