@@ -7,14 +7,22 @@ interface HeaderProps {
   onSearch: (query: string) => void;
   isAnalyzing?: boolean;
   onHelpCenter?: () => void;
+  isDarkMode: boolean;
+  setIsDarkMode: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 export default function Header({
   activeTab,
   onSearch,
   isAnalyzing = false,
-  onHelpCenter
+  onHelpCenter,
+  isDarkMode,
+  setIsDarkMode
 }: HeaderProps) {
+
+
+
+
   const [searchQuery, setSearchQuery] = React.useState('');
   const [showNotifications, setShowNotifications] = React.useState(false);
   const [notifications, setNotifications] = React.useState([
@@ -53,6 +61,12 @@ export default function Header({
 
       {/* Global Actions Bar */}
       <div className="flex items-center gap-4">
+        <button
+          onClick={() => setIsDarkMode(!isDarkMode)}
+          className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-900 hover:text-indigo-400 transition-colors"
+        >
+          {isDarkMode ? 'Light Mode' : 'Dark Mode'}
+        </button>
         {/* Search */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 w-4 h-4" />
