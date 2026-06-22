@@ -13,6 +13,8 @@ import os
 
 from explorer import WebExplorer
 from llm_agent import run_full_analysis
+from pipeline import build_agent_pipeline
+from uipath_client import UiPathApiError, UiPathConfigError, uipath_status
 
 app = FastAPI(title="WebGraph Explorer API", version="0.1.0")
 
@@ -46,6 +48,10 @@ class ExploreRequest(BaseModel):
 
 class AnalyzeRequest(BaseModel):
     graph: dict   # pass the graph JSON directly
+
+
+class PipelineRequest(BaseModel):
+    graph: dict
 
 
 # ------------------------------------------------------------------ #
@@ -121,9 +127,29 @@ async def analyze_graph(req: AnalyzeRequest):
         raise HTTPException(500, f"Analysis failed: {exc}")
 
 
+@app.post("/pipeline")
+async def build_pipeline(req: PipelineRequest):
+    """Build the agent workflow payload from a crawler graph."""
+    try:
+        return build_agent_pipeline(req.graph)
+    except Exception as exc:
+        raise HTTPException(500, f"Pipeline failed: {exc}")
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/uipath/status")
+async def get_uipath_status():
+    """Validate UiPath OAuth configuration without exposing secrets."""
+    try:
+        return uipath_status()
+    except UiPathConfigError as exc:
+        raise HTTPException(400, str(exc))
+    except UiPathApiError as exc:
+        raise HTTPException(502, str(exc))
 
 
 if __name__ == "__main__":
