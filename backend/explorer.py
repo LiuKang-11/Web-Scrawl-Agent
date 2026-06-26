@@ -11,6 +11,7 @@ import os
 import time
 import base64
 from dataclasses import dataclass, field, asdict
+from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -29,6 +30,7 @@ class State:
     title: str
     page_summary: str
     screenshot_b64: Optional[str]
+    screenshot_path: Optional[str]
     interactive_elements: list
     dom_fingerprint: str
     modal_context: Optional[str]
@@ -74,6 +76,7 @@ class WebExplorer:
         headless: bool = True,
         llm_rerank: bool = True,
         allow_external_links: bool = False,
+        screenshot_dir: str = "screenshots",
     ):
         self.target_url = target_url
         self.credentials = credentials or {}
@@ -82,6 +85,7 @@ class WebExplorer:
         self.headless = headless
         self.llm_rerank = llm_rerank
         self.allow_external_links = allow_external_links
+        self.screenshot_dir = Path(screenshot_dir)
 
         self.states: dict[str, State] = {}
         self.transitions: list[Transition] = []
@@ -147,7 +151,10 @@ class WebExplorer:
         summary = await page.evaluate(
             "() => document.body?.innerText?.slice(0, 400) || ''"
         )
-        screenshot = await page.screenshot(type="png")
+        screenshot = await page.screenshot(type="png", full_page=True)
+        self.screenshot_dir.mkdir(parents=True, exist_ok=True)
+        screenshot_path = self.screenshot_dir / f"{state_id}.png"
+        screenshot_path.write_bytes(screenshot)
         modal = await self._get_modal(page)
         fingerprint = await self._state_fingerprint(page, url, title, elements, modal)
         requests = list(self._api_log[-5:])
@@ -159,6 +166,7 @@ class WebExplorer:
             title=title,
             page_summary=summary.strip(),
             screenshot_b64=base64.b64encode(screenshot).decode(),
+            screenshot_path=str(screenshot_path),
             interactive_elements=elements,
             dom_fingerprint=fingerprint,
             modal_context=modal,
@@ -708,6 +716,7 @@ if __name__ == "__main__":
     parser.add_argument("--strategy", choices=["bfs", "dfs"], default="bfs")
     parser.add_argument("--headed", action="store_true")
     parser.add_argument("--output", default="graph.json")
+    parser.add_argument("--screenshot-dir", default="screenshots")
     parser.add_argument("--no-llm-rerank", action="store_true")
     parser.add_argument("--allow-external-links", action="store_true")
     args = parser.parse_args()
@@ -728,6 +737,7 @@ if __name__ == "__main__":
         headless=not args.headed,
         llm_rerank=not args.no_llm_rerank,
         allow_external_links=args.allow_external_links,
+        screenshot_dir=args.screenshot_dir,
     )
     graph = asyncio.run(explorer.explore())
 
