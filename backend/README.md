@@ -28,7 +28,7 @@ or with screenshot record
 ```bash
 
 python explorer.py "https://example.com" \
-  --max-states 5 \
+  --max-states 10 \
   --strategy bfs \
   --headed \
   --no-llm-rerank \
