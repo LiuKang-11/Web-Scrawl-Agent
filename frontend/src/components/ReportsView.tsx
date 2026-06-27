@@ -13,34 +13,63 @@ import {
   Info,
   Loader2
 } from 'lucide-react';
+import { ExplorerGraph, PlaywrightActionRunResult, TestCase } from '../types';
 
 interface ReportsViewProps {
   searchText: string;
+  testCases?: TestCase[];
+  latestGraph?: ExplorerGraph | null;
+  executionResult?: PlaywrightActionRunResult | null;
   onSetStatusText?: (msg: string) => void;
 }
 
 export default function ReportsView({
   searchText,
+  testCases = [],
+  latestGraph = null,
+  executionResult = null,
   onSetStatusText
 }: ReportsViewProps) {
+  void searchText;
   
   const [activeSprint, setActiveSprint] = React.useState('Sprint 42');
   const [isDownloading, setIsDownloading] = React.useState(false);
   const [hoveredTrendIdx, setHoveredTrendIdx] = React.useState<number | null>(null);
+  void activeSprint;
+  void setActiveSprint;
+
+  const totalTests = executionResult?.summary.total || testCases.length;
+  const failedTests = executionResult?.summary.failed || 0;
+  const passedTests = executionResult?.summary.passed || 0;
+  const readyIndex = totalTests ? Math.round((passedTests / totalTests) * 1000) / 10 : 0;
+  const goDecision = totalTests > 0 && failedTests === 0;
+  const criticalCount = testCases.filter(testCase => testCase.priority === 'Critical').length;
+  const crawledPages = latestGraph?.stats.total_states || 0;
+  const transitions = latestGraph?.stats.total_transitions || 0;
 
   const coverageTrend = [
-    { sprint: 'Sprint 38', coverage: 82, errors: 12 },
-    { sprint: 'Sprint 39', coverage: 84, errors: 8 },
-    { sprint: 'Sprint 40', coverage: 85, errors: 6 },
-    { sprint: 'Sprint 41', coverage: 86, errors: 5 },
-    { sprint: 'Sprint 42', coverage: 88, errors: 3 }
+    { sprint: 'Crawl', coverage: crawledPages ? 45 : 0, errors: 0 },
+    { sprint: 'Specs', coverage: testCases.length ? 65 : 0, errors: 0 },
+    { sprint: 'Run', coverage: totalTests ? Math.max(70, readyIndex) : 0, errors: failedTests },
+    { sprint: 'Triage', coverage: totalTests ? Math.max(75, readyIndex) : 0, errors: failedTests },
+    { sprint: 'Report', coverage: totalTests ? readyIndex : 0, errors: failedTests }
   ];
 
-  const failureDistribution = [
-    { category: 'Stripe API Webhooks', weight: '45%' },
-    { category: 'Mobile Viewport CSS Offsets', weight: '30%' },
-    { category: 'Session Token Cookie Expire', weight: '25%' }
-  ];
+  const failureDistribution = React.useMemo(() => {
+    if (!testCases.length) {
+      return [{ category: 'No generated test cases yet', weight: '0%' }];
+    }
+
+    const counts = testCases.reduce<Record<string, number>>((acc, testCase) => {
+      acc[testCase.category] = (acc[testCase.category] || 0) + 1;
+      return acc;
+    }, {});
+
+    return Object.entries(counts).map(([category, count]) => ({
+      category,
+      weight: `${Math.round((count / testCases.length) * 100)}%`,
+    }));
+  }, [testCases]);
 
   const handleDownload = () => {
     setIsDownloading(true);
@@ -48,10 +77,10 @@ export default function ReportsView({
 
     setTimeout(() => {
       setIsDownloading(false);
-      if (onSetStatusText) onSetStatusText("Downloaded Acme-Store-Sprint-42-Report.pdf successfully.");
+      if (onSetStatusText) onSetStatusText(`Downloaded FlowGuard-${totalTests || 0}-Specs-Report.pdf successfully.`);
       
       // Minimal in-app confirmation triggers
-      alert("FlowGuard AI: ACM-42-Ready-Digest.pdf has been prepared and compiled successfully under CJS standalone. Ready for executive board.");
+      alert(`FlowGuard AI: report prepared with ${totalTests || 0} specs, ${passedTests} passed, ${failedTests} failed.`);
     }, 2000);
   };
 
@@ -105,7 +134,7 @@ export default function ReportsView({
                 Release Decision Readiness Gauge
               </h3>
               <span className="text-emerald-400 text-xs font-bold uppercase tracking-widest font-mono">
-                ● RECOMMENDED GO DECISION
+                ● {goDecision ? 'RECOMMENDED GO DECISION' : totalTests ? 'TRIAGE REQUIRED' : 'AWAITING EXECUTION'}
               </span>
             </div>
 
@@ -113,20 +142,22 @@ export default function ReportsView({
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-neutral-950 p-4 rounded-xl border border-neutral-850/80 relative overflow-hidden flex flex-col justify-between">
                 <span className="text-[10px] text-neutral-400 uppercase tracking-wider font-semibold">Ready Index</span>
-                <span className="text-3xl font-extrabold text-emerald-400 mt-2">98.4%</span>
-                <p className="text-[10px] text-neutral-500 mt-1 font-mono">Passes 95% target barrier requirement</p>
+                <span className={`text-3xl font-extrabold mt-2 ${goDecision ? 'text-emerald-400' : failedTests ? 'text-rose-400' : 'text-neutral-300'}`}>
+                  {totalTests ? `${readyIndex}%` : 'N/A'}
+                </span>
+                <p className="text-[10px] text-neutral-500 mt-1 font-mono">{totalTests ? `${passedTests}/${totalTests} Playwright specs passed` : 'Run selected specs to compute readiness'}</p>
               </div>
 
               <div className="bg-neutral-950 p-4 rounded-xl border border-neutral-850/80 relative overflow-hidden flex flex-col justify-between">
                 <span className="text-[10px] text-neutral-400 uppercase tracking-wider font-semibold">Active Defect Count</span>
-                <span className="text-3xl font-extrabold text-neutral-200 mt-2">0 Blockers</span>
-                <p className="text-[10px] text-neutral-500 mt-1 font-mono">0 Critical anomalies active</p>
+                <span className="text-3xl font-extrabold text-neutral-200 mt-2">{failedTests} Failures</span>
+                <p className="text-[10px] text-neutral-500 mt-1 font-mono">{criticalCount} critical-priority specs in current suite</p>
               </div>
 
               <div className="bg-neutral-950 p-4 rounded-xl border border-neutral-850/80 relative overflow-hidden flex flex-col justify-between">
                 <span className="text-[10px] text-neutral-400 uppercase tracking-wider font-semibold">Regression Risk Index</span>
-                <span className="text-3xl font-extrabold text-indigo-300 mt-2">Low Concern</span>
-                <p className="text-[10px] text-neutral-500 mt-1 font-mono">Continuous checkups completed</p>
+                <span className="text-3xl font-extrabold text-indigo-300 mt-2">{failedTests ? 'Elevated' : totalTests ? 'Low Concern' : 'Unknown'}</span>
+                <p className="text-[10px] text-neutral-500 mt-1 font-mono">{crawledPages} states, {transitions} transitions crawled</p>
               </div>
             </div>
           </div>
@@ -240,16 +271,16 @@ export default function ReportsView({
             
             <div className="space-y-3.5 text-xs">
               <div className="bg-neutral-950/60 p-3 rounded-lg border border-neutral-850/60 flex flex-col gap-1.5">
-                <span className="text-[10px] font-mono font-bold text-indigo-400 uppercase">1. REDUNDANT ROUTE checks</span>
+                <span className="text-[10px] font-mono font-bold text-indigo-400 uppercase">1. Generated Suite Scope</span>
                 <p className="text-neutral-300 leading-normal">
-                  Skipping duplicate viewport checks on static layout elements on non-responsive routes saves <span className="text-indigo-400 font-mono font-bold">~2.4 sec</span> per execution cycle.
+                  Current report covers <span className="text-indigo-400 font-mono font-bold">{testCases.length}</span> generated specs from <span className="text-indigo-400 font-mono font-bold">{crawledPages}</span> crawled states.
                 </p>
               </div>
 
               <div className="bg-neutral-950/60 p-3 rounded-lg border border-neutral-850/60 flex flex-col gap-1.5">
-                <span className="text-[10px] font-mono font-bold text-amber-400 uppercase font-bold">2. STRIPE latency wait latching</span>
+                <span className="text-[10px] font-mono font-bold text-amber-400 uppercase font-bold">2. Execution Triage</span>
                 <p className="text-neutral-300 leading-normal">
-                  Adding temporary locks prevents timeout errors originating from stripe test limits during busy release cycles.
+                  {failedTests ? 'Review Failure Analysis for failed Playwright frames and selector bounding boxes.' : totalTests ? 'No failed Playwright frames were reported in the latest run.' : 'Run selected specs to populate execution metrics.'}
                 </p>
               </div>
             </div>

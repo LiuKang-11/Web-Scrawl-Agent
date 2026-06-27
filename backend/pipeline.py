@@ -134,6 +134,29 @@ def _build_actions(feature: dict[str, Any], invalid: bool = False) -> list[dict[
     return actions
 
 
+def _primary_action_target(feature: dict[str, Any]) -> str:
+    elements = feature.get("runnable_elements", []) or []
+    targets = [
+        element for element in elements
+        if element.get("selector")
+        and element.get("visible") is not False
+        and not element.get("disabled")
+        and (element.get("tag") in {"button", "a"} or element.get("role") in {"button", "tab", "link"})
+    ]
+    if not targets:
+        return "visible controls"
+
+    target = targets[0]
+    label = target.get("text") or target.get("name") or target.get("selector") or "primary action"
+    return " ".join(str(label).split())[:60]
+
+
+def _test_case_context(feature: dict[str, Any]) -> str:
+    page = feature.get("page") or "/"
+    target = _primary_action_target(feature)
+    return f"{page} via {target}"
+
+
 def _feature_name(route: str, title: str, elements: list[dict[str, Any]]) -> str:
     probe = f"{route} {title} {' '.join(e.get('text', '') for e in elements)}".lower()
     if any(word in probe for word in ["login", "log in", "signin", "sign in"]):
@@ -227,10 +250,11 @@ def generate_test_cases(features_payload: dict[str, Any]) -> dict[str, Any]:
     for index, feature in enumerate(features_payload.get("features", []), start=1):
         priority = "Critical" if feature.get("risk") == "critical" else "High"
         page = feature.get("page", "/")
+        context = _test_case_context(feature)
 
         tests.append(GeneratedTestCase(
             id=f"AI-TC-{index:04d}",
-            name=f"{feature['feature']} should support the expected user flow",
+            name=f"{feature['feature']} on {context} should support the expected user flow",
             priority=priority,
             category="UI",
             source="FlowGuard Feature Detection Agent",
@@ -248,7 +272,7 @@ def generate_test_cases(features_payload: dict[str, Any]) -> dict[str, Any]:
         if any("invalid" in test for test in feature.get("possible_tests", [])):
             tests.append(GeneratedTestCase(
                 id=f"AI-TC-{index:04d}-NEG",
-                name=f"{feature['feature']} should show useful validation errors",
+                name=f"{feature['feature']} on {context} should show useful validation errors",
                 priority=priority,
                 category="Security" if feature["feature"] in {"Login", "Registration"} else "UI",
                 source="FlowGuard Test Case Agent",

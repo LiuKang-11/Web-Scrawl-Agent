@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ExplorerGraph, TabType, TestCase, TestingSourceType } from './types';
+import { ExplorerGraph, PlaywrightActionRunResult, TabType, TestCase, TestingSourceType } from './types';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import DashboardView from './components/DashboardView';
@@ -33,6 +33,7 @@ export default function App() {
   const [runningTestIds, setRunningTestIds] = useState<string[]>([]);
   const [runningTestCases, setRunningTestCases] = useState<TestCase[]>([]);
   const [latestGraph, setLatestGraph] = useState<ExplorerGraph | null>(null);
+  const [latestExecutionResult, setLatestExecutionResult] = useState<PlaywrightActionRunResult | null>(null);
   
   // Custom interactive system alert ticker status
   const [systemAlert, setSystemAlert] = useState<{ msg: string; type: 'info' | 'success' | 'warn' } | null>(null);
@@ -72,6 +73,7 @@ export default function App() {
   const handleRunSelectedTests = (selectedIds: string[], selectedCases: TestCase[]) => {
     setRunningTestIds(selectedIds);
     setRunningTestCases(selectedCases);
+    setLatestExecutionResult(null);
     setActiveTab('Test Execution');
     notify(`Starting active pipeline execution for selected specs: ${selectedIds.join(', ')}`, 'success');
   };
@@ -195,6 +197,7 @@ export default function App() {
               publicUrl={publicUrl}
               runningTestIds={runningTestIds}
               runningTestCases={runningTestCases}
+              onExecutionResult={setLatestExecutionResult}
               onSetStatusText={(msg) => notify(msg, 'info')}
             />
           )}
@@ -202,6 +205,8 @@ export default function App() {
           {activeTab === 'Failure Analysis' && (
             <FailureAnalysisView 
               searchText={searchText}
+              testCases={runningTestCases}
+              executionResult={latestExecutionResult}
               onSetStatusText={(msg) => notify(msg, 'warn')}
             />
           )}
@@ -209,6 +214,9 @@ export default function App() {
           {activeTab === 'Reports' && (
             <ReportsView 
               searchText={searchText}
+              testCases={runningTestCases}
+              latestGraph={latestGraph}
+              executionResult={latestExecutionResult}
               onSetStatusText={(msg) => notify(msg, 'info')}
             />
           )}

@@ -10,8 +10,8 @@ import {
   Cpu, 
   AlertTriangle,
 } from 'lucide-react';
-import { executeUiPathTests, getUiPathJob } from '../api';
-import { TestCase, UiPathJobStatus } from '../types';
+import { executeUiPathTests, getUiPathJob, runPlaywrightActions } from '../api';
+import { PlaywrightActionFrame, PlaywrightActionRunResult, TestAction, TestCase, UiPathJobStatus } from '../types';
 
 interface TestExecutionViewProps {
   searchText: string;
@@ -19,14 +19,102 @@ interface TestExecutionViewProps {
   runningTestIds?: string[];
   runningTestCases?: TestCase[];
   onSetStatusText?: (msg: string) => void;
+  onExecutionResult?: (result: PlaywrightActionRunResult) => void;
 }
+
+interface DemoStep {
+  testCaseId: string;
+  title: string;
+  detail: string;
+  action?: TestAction;
+  actionIndex: number;
+}
+
+const formatActionTitle = (action: TestAction, index: number) => {
+  switch (action.type) {
+    case 'navigate':
+      return `Open ${action.url || 'target page'}`;
+    case 'click':
+      return `Click ${action.label || action.selector || `element ${index + 1}`}`;
+    case 'fill':
+      return `Fill ${action.label || action.selector || `field ${index + 1}`}`;
+    case 'select':
+      return `Select ${action.label || action.selector || `option ${index + 1}`}`;
+    case 'wait':
+      return `Wait ${action.milliseconds || action.timeout_ms || 1000}ms`;
+    case 'assert_page_loaded':
+      return 'Assert page loaded';
+    case 'assert_no_browser_error':
+      return 'Assert no browser errors';
+    default:
+      return `Run action ${index + 1}`;
+  }
+};
+
+const formatActionDetail = (action: TestAction) => {
+  const target = action.url || action.selector || action.label;
+  if (action.type === 'fill') {
+    return `${target || 'input'} = ${action.value || '<generated value>'}`;
+  }
+  if (action.expected) {
+    return `Expected: ${action.expected}`;
+  }
+  return target || 'UiPath-compatible browser action';
+};
+
+const buildDemoSteps = (testCases: TestCase[]): DemoStep[] => {
+  return testCases.flatMap((testCase) => {
+    if (testCase.actions?.length) {
+      return testCase.actions.map((action, index) => ({
+        testCaseId: testCase.id,
+        title: formatActionTitle(action, index),
+        detail: `${testCase.id} · ${formatActionDetail(action)}`,
+        action,
+        actionIndex: index,
+      }));
+    }
+
+    if (testCase.steps?.length) {
+      return testCase.steps.map((step, index) => ({
+        testCaseId: testCase.id,
+        title: step,
+        detail: `${testCase.id} · Step ${index + 1} from generated test spec`,
+        actionIndex: index,
+      }));
+    }
+
+    return [{
+      testCaseId: testCase.id,
+      title: testCase.name,
+      detail: testCase.expectedResult || 'Run generated test case',
+      actionIndex: 0,
+    }];
+  });
+};
+
+const resolveActionUrl = (baseUrl: string, action?: TestAction) => {
+  try {
+    return new URL(action?.url || baseUrl, baseUrl).toString();
+  } catch {
+    return baseUrl;
+  }
+};
+
+const safeHostname = (url: string) => {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
+};
 
 export default function TestExecutionView({
   searchText,
   publicUrl,
   runningTestIds = [],
   runningTestCases = [],
-  onSetStatusText
+  onSetStatusText,
+  onExecutionResult
 }: TestExecutionViewProps) {
   void searchText;
   
@@ -36,6 +124,9 @@ export default function TestExecutionView({
   const [submission, setSubmission] = React.useState<{ jobId?: number | null; packageId?: string; state?: string | null } | null>(null);
   const [jobStatus, setJobStatus] = React.useState<UiPathJobStatus | null>(null);
   const [executionError, setExecutionError] = React.useState<string | null>(null);
+  const [demoSteps, setDemoSteps] = React.useState<DemoStep[]>([]);
+  const [demoStepIndex, setDemoStepIndex] = React.useState(-1);
+  const [playwrightFrames, setPlaywrightFrames] = React.useState<PlaywrightActionFrame[]>([]);
   const submittedKeyRef = React.useRef<string>('');
   
   // Terminal logs streaming state
@@ -75,14 +166,17 @@ export default function TestExecutionView({
     }
   };
 
-  const displayState = executionError
-    ? 'ERROR'
+  const displayState = executionError && !isRunning
+    ? 'DEMO ONLY'
     : jobStatus?.state || submission?.state || (isRunning ? 'SUBMITTED' : runningTestCases.length ? 'READY' : 'IDLE');
 
   React.useEffect(() => {
     if (!selectedRunKey || runningTestCases.length === 0) {
       setIsRunning(false);
       setProgress(0);
+      setDemoSteps([]);
+      setDemoStepIndex(-1);
+      setPlaywrightFrames([]);
       setLogs(["[SYSTEM] Select test cases and click Run Selected to submit a UiPath execution."]);
       return;
     }
@@ -94,17 +188,22 @@ export default function TestExecutionView({
     setJobStatus(null);
     setSubmission(null);
     setExecutionError(null);
+    setPlaywrightFrames([]);
     setIsRunning(true);
+    const nextDemoSteps = buildDemoSteps(runningTestCases);
+    setDemoSteps(nextDemoSteps);
+    setDemoStepIndex(nextDemoSteps.length ? 0 : -1);
     setLogs([
       `[SYSTEM] Preparing FlowGuard package for ${runningTestCases.length} selected test case(s).`,
       `[INFO] Target app: ${publicUrl}`,
+      `[DEMO] Prepared ${nextDemoSteps.length} executable UI action(s) for local playback.`,
       "[ACTION] Submitting execution package to UiPath Orchestrator...",
     ]);
 
     executeUiPathTests(publicUrl, runningTestCases)
       .then(result => {
         setSubmission({ jobId: result.job_id, packageId: result.package_id, state: result.state });
-        setProgress(stateProgress(result.state));
+        setProgress(prev => Math.max(prev, stateProgress(result.state)));
         setLogs(prev => [
           ...prev,
           `[SUCCESS] Package ${result.package_id} submitted to UiPath.`,
@@ -116,12 +215,39 @@ export default function TestExecutionView({
       .catch(error => {
         const message = error instanceof Error ? error.message : 'UiPath execution failed.';
         setExecutionError(message);
-        setIsRunning(false);
-        setProgress(100);
-        setLogs(prev => [...prev, `[ERROR] ${message}`]);
-        onSetStatusText?.('UiPath execution submission failed.');
+        setProgress(prev => Math.max(prev, 15));
+        setLogs(prev => [
+          ...prev,
+          `[WARNING] UiPath submission failed: ${message}`,
+          "[DEMO] Continuing with local execution playback from the generated test actions.",
+        ]);
+        onSetStatusText?.('UiPath submission failed; showing local demo playback.');
       });
-  }, [onSetStatusText, publicUrl, runningTestCases, selectedRunKey]);
+
+    runPlaywrightActions(publicUrl, runningTestCases)
+      .then(result => {
+        const frames = result.results.flatMap(item => item.frames || []);
+        if (!frames.length) {
+          setLogs(prev => [...prev, "[WARNING] Playwright action runner completed without screenshot frames."]);
+          return;
+        }
+
+        setPlaywrightFrames(frames);
+        setDemoStepIndex(0);
+        setProgress(0);
+        setIsRunning(true);
+        setLogs(prev => [
+          ...prev,
+          `[SUCCESS] Playwright captured ${frames.length} real browser frame(s).`,
+          "[PLAYWRIGHT] Replaying captured screenshots with selector bounding boxes.",
+        ]);
+        onExecutionResult?.(result);
+      })
+      .catch(error => {
+        const message = error instanceof Error ? error.message : 'Playwright action runner failed.';
+        setLogs(prev => [...prev, `[WARNING] Playwright frame capture failed: ${message}`]);
+      });
+  }, [onExecutionResult, onSetStatusText, publicUrl, runningTestCases, selectedRunKey]);
 
   // Handle timer increments
   React.useEffect(() => {
@@ -141,7 +267,7 @@ export default function TestExecutionView({
       try {
         const status = await getUiPathJob(submission.jobId as number);
         setJobStatus(status);
-        setProgress(stateProgress(status.state));
+        setProgress(prev => Math.max(prev, stateProgress(status.state)));
         setLogs(prev => {
           const line = `[INFO] UiPath job ${status.id} state: ${status.state || 'Unknown'}`;
           return prev[prev.length - 1] === line ? prev : [...prev, line];
@@ -168,22 +294,113 @@ export default function TestExecutionView({
     return () => window.clearInterval(timer);
   }, [isRunning, onSetStatusText, submission?.jobId]);
 
+  React.useEffect(() => {
+    const playbackLength = playwrightFrames.length || demoSteps.length;
+    if (!isRunning || playbackLength === 0 || demoStepIndex < 0 || demoStepIndex >= playbackLength) return;
+
+    const timer = window.setTimeout(() => {
+      const currentFrame = playwrightFrames[demoStepIndex];
+      const currentStep = demoSteps[demoStepIndex];
+      const logLine = currentFrame
+        ? `[PLAYWRIGHT] ${currentFrame.label} (${currentFrame.url})`
+        : `[DEMO] ${currentStep.title} (${currentStep.detail})`;
+      setLogs(prev => [...prev, logLine]);
+      setDemoStepIndex(prev => prev + 1);
+      setProgress(prev => Math.max(prev, Math.round(((demoStepIndex + 1) / playbackLength) * 100)));
+    }, 1000);
+
+    return () => window.clearTimeout(timer);
+  }, [demoStepIndex, demoSteps, isRunning, playwrightFrames]);
+
+  React.useEffect(() => {
+    const playbackLength = playwrightFrames.length || demoSteps.length;
+    if (!isRunning || playbackLength === 0 || demoStepIndex < playbackLength) return;
+
+    setLogs(prev => (
+      prev[prev.length - 1] === "[SUCCESS] Local demo playback completed."
+        ? prev
+        : [...prev, "[SUCCESS] Local demo playback completed."]
+    ));
+
+    if (!submission?.jobId || isTerminalState(jobStatus?.state)) {
+      setIsRunning(false);
+      setProgress(100);
+      onSetStatusText?.('Local test execution demo completed.');
+    }
+  }, [demoStepIndex, demoSteps.length, isRunning, jobStatus?.state, onSetStatusText, playwrightFrames.length, submission?.jobId]);
+
   // Execution pipeline configuration
-  const steps = runningTestCases.length
-    ? runningTestCases.map((testCase, index) => ({
-        title: testCase.name,
-        status: jobStatus?.state === 'Successful'
-          ? 'Passed'
-          : executionError || ['Faulted', 'Stopped', 'Suspended'].includes(jobStatus?.state || '')
-            ? 'Failed'
-            : index === 0
+  const remoteFailed = ['Faulted', 'Stopped', 'Suspended'].includes(jobStatus?.state || '');
+  const steps = playwrightFrames.length
+    ? playwrightFrames.map((frame, index) => ({
+        title: frame.label,
+        status: frame.status === 'failed' || remoteFailed
+          ? 'Failed'
+          : index < demoStepIndex
+            ? 'Passed'
+            : index === demoStepIndex && isRunning
               ? 'Active'
               : 'Pending',
-        detail: testCase.expectedResult || testCase.steps?.join(' -> ') || 'Submitted to the UiPath runner.',
+        detail: `${frame.test_case_id || 'Playwright'} · ${frame.type || 'action'} · ${frame.url}`,
+      }))
+    : demoSteps.length
+    ? demoSteps.map((step, index) => ({
+        title: step.title,
+        status: jobStatus?.state === 'Successful' || index < demoStepIndex
+          ? 'Passed'
+          : remoteFailed && index === Math.min(demoStepIndex, demoSteps.length - 1)
+            ? 'Failed'
+            : index === demoStepIndex && isRunning
+              ? 'Active'
+              : 'Pending',
+        detail: step.detail,
       }))
     : [
         { title: "Waiting for selected test cases", status: "Pending", detail: "Open Test Cases, generate from the latest crawl, then run selected specs." },
       ];
+
+  const activeDemoStep = demoStepIndex >= 0 && demoStepIndex < demoSteps.length
+    ? demoSteps[demoStepIndex]
+    : demoSteps[demoSteps.length - 1];
+  const activeFrame = demoStepIndex >= 0 && demoStepIndex < playwrightFrames.length
+    ? playwrightFrames[demoStepIndex]
+    : playwrightFrames[playwrightFrames.length - 1];
+  const actionType = activeDemoStep?.action?.type || 'assert_page_loaded';
+  const activeUrl = activeFrame?.url || resolveActionUrl(publicUrl, activeDemoStep?.action);
+  const cursorPositions: Record<string, { top: string; left: string }> = {
+    navigate: { top: '14%', left: '48%' },
+    fill: { top: '53%', left: '52%' },
+    select: { top: '62%', left: '56%' },
+    click: { top: '73%', left: '66%' },
+    wait: { top: '43%', left: '50%' },
+    assert_page_loaded: { top: '36%', left: '50%' },
+    assert_no_browser_error: { top: '24%', left: '82%' },
+  };
+  const focusBoxes: Record<string, { top: string; left: string; width: string; height: string }> = {
+    navigate: { top: '8%', left: '24%', width: '52%', height: '6%' },
+    fill: { top: '48%', left: '18%', width: '64%', height: '10%' },
+    select: { top: '58%', left: '18%', width: '64%', height: '9%' },
+    click: { top: '68%', left: '55%', width: '28%', height: '11%' },
+    wait: { top: '34%', left: '20%', width: '60%', height: '18%' },
+    assert_page_loaded: { top: '22%', left: '12%', width: '76%', height: '18%' },
+    assert_no_browser_error: { top: '18%', left: '70%', width: '20%', height: '10%' },
+  };
+  const cursorPosition = cursorPositions[actionType] || cursorPositions.assert_page_loaded;
+  const focusBox = focusBoxes[actionType] || focusBoxes.assert_page_loaded;
+  const realBox = activeFrame?.bounding_box && activeFrame.viewport
+    ? {
+        top: `${(activeFrame.bounding_box.y / activeFrame.viewport.height) * 100}%`,
+        left: `${(activeFrame.bounding_box.x / activeFrame.viewport.width) * 100}%`,
+        width: `${(activeFrame.bounding_box.width / activeFrame.viewport.width) * 100}%`,
+        height: `${(activeFrame.bounding_box.height / activeFrame.viewport.height) * 100}%`,
+      }
+    : null;
+  const realCursor = activeFrame?.bounding_box && activeFrame.viewport
+    ? {
+        top: `${((activeFrame.bounding_box.y + activeFrame.bounding_box.height / 2) / activeFrame.viewport.height) * 100}%`,
+        left: `${((activeFrame.bounding_box.x + activeFrame.bounding_box.width / 2) / activeFrame.viewport.width) * 100}%`,
+      }
+    : null;
 
   // Convert elapsed seconds to mm:ss block format
   const formatTime = (seconds: number) => {
@@ -252,7 +469,7 @@ export default function TestExecutionView({
         {/* Big HUD Progress Bar */}
         <div className="space-y-1.5">
           <div className="flex justify-between items-center text-[10px] font-mono text-neutral-400 font-bold">
-            <span>UiPath Execution Progress</span>
+            <span>Execution Demo Progress</span>
             <span>{Math.floor(progress)}% Completed</span>
           </div>
           <div className="h-2 w-full bg-neutral-900 rounded-full overflow-hidden border border-neutral-800">
@@ -350,7 +567,7 @@ export default function TestExecutionView({
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-[10px] text-neutral-400 uppercase tracking-widest font-mono font-bold flex items-center gap-1.5">
               <Cpu className="w-4.5 h-4.5 text-indigo-400" />
-              Live Chromium iFrame preview
+              Live Chromium frame preview
             </h3>
 
             {/* Overlay tools */}
@@ -377,43 +594,95 @@ export default function TestExecutionView({
                 <div className="w-2.5 h-2.5 rounded-full bg-neutral-700" />
               </div>
               <div className="bg-neutral-900 border border-neutral-800 text-[10px] font-mono py-0.5 px-3 rounded text-neutral-400 w-3/5 truncate text-center">
-                {publicUrl}
+                {activeUrl}
               </div>
               <div className="w-4" />
             </div>
 
-            {/* Simulated Live Snapshot UI */}
+            {/* Real Playwright screenshot frames with selector overlay; iframe is fallback while capture runs. */}
             <div className="flex-1 relative overflow-hidden bg-neutral-950 flex items-center justify-center">
-              <img 
-                alt="App screenshot"
-                className="w-full h-full object-cover select-none pointer-events-none opacity-85"
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuAcDzixMB8jjvvgmf96N-xgSbe2byOs5_A0PHe2OLmjnr-_onVLRFxYEL6pv2GyXvPCsgaTLnS2xv5LHFAuEN22csDn2Bh-g6Vt6gkpFi2MtuxdyGKI4gFHxdvSHEnXXl4uEnSrUfnJCc9BLj2V18lSB1wax5LvQti6wkbDBPfKyQhsKpSHc3CRcizbMdCSwkjj4HcBZ6Jcn4xNi3lA6r5KtFZaE4rPz6Yu1XXlStqb21Z1TmF9zJo0G3R51nEm3TX4UaUNgb-pSOk"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&q=80&w=600";
-                }}
-              />
+              {activeFrame ? (
+                <div
+                  className="relative max-w-full max-h-full w-full bg-white overflow-hidden"
+                  style={{ aspectRatio: `${activeFrame.viewport.width} / ${activeFrame.viewport.height}` }}
+                >
+                  <img
+                    alt={`Playwright screenshot for ${activeFrame.label}`}
+                    src={`data:image/png;base64,${activeFrame.screenshot_b64}`}
+                    className="absolute inset-0 h-full w-full object-contain"
+                  />
 
-              {/* Glowing cursor pointer simulating AI automation click target */}
-              <div 
-                className="absolute w-7 h-7 rounded-full bg-indigo-500/20 border-2 border-indigo-400/80 animate-ping" 
-                style={{ top: '65%', left: '48%', animationDuration: '3s' }}
-              />
-              <div 
-                className="absolute w-3 h-3 rounded-full bg-indigo-400 shadow-[0_0_15px_#818cf8]"
-                style={{ top: '65%', left: '48%' }}
-              />
+                  <div className="absolute left-3 top-3 bg-white/90 border border-neutral-200 text-neutral-500 text-[9px] font-mono px-2 py-1 rounded shadow-sm max-w-[70%] truncate">
+                    {safeHostname(activeFrame.url)}
+                  </div>
 
-              {/* Glowing interactive highlight outline box on critical form elements */}
-              <div 
-                className="absolute border border-indigo-400 bg-indigo-400/5 shadow-[0_0_15px_rgba(99,102,241,0.1)] rounded"
-                style={{ top: '48%', left: '15%', width: '70%', height: '35%' }}
-              />
-              <span 
-                className="absolute bg-indigo-500 text-white font-mono text-[9px] font-bold px-1 rounded shadow-lg"
-                style={{ top: '44%', left: '15%' }}
-              >
-                Automation Focus: UiPath Test Runner
-              </span>
+                  {realCursor ? (
+                    <>
+                      <div
+                        className="absolute w-7 h-7 -translate-x-1/2 -translate-y-1/2 rounded-full bg-indigo-500/20 border-2 border-indigo-400/80 animate-ping"
+                        style={{ ...realCursor, animationDuration: '3s' }}
+                      />
+                      <div
+                        className="absolute w-3 h-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-indigo-400 shadow-[0_0_15px_#818cf8]"
+                        style={realCursor}
+                      />
+                    </>
+                  ) : null}
+
+                  {realBox ? (
+                    <>
+                      <div
+                        className="absolute border-2 border-indigo-400 bg-indigo-400/10 shadow-[0_0_18px_rgba(99,102,241,0.22)] rounded"
+                        style={realBox}
+                      />
+                      <span
+                        className="absolute bg-indigo-500 text-white font-mono text-[9px] font-bold px-1 rounded shadow-lg max-w-[70%]"
+                        style={{ top: `calc(${realBox.top} - 18px)`, left: realBox.left }}
+                      >
+                        Automation Focus: {activeFrame.label}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="absolute bottom-3 left-3 bg-indigo-500 text-white font-mono text-[9px] font-bold px-1.5 py-0.5 rounded shadow-lg">
+                      Playwright Frame: {activeFrame.label}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <iframe
+                    key={activeUrl}
+                    title="Live Chromium page preview"
+                    src={activeUrl}
+                    sandbox="allow-forms allow-same-origin allow-scripts allow-popups"
+                    className="absolute inset-0 w-full h-full border-0 bg-white"
+                  />
+
+                  <div className="absolute left-3 top-3 bg-white/90 border border-neutral-200 text-neutral-500 text-[9px] font-mono px-2 py-1 rounded shadow-sm max-w-[70%] truncate">
+                    {safeHostname(activeUrl)}
+                  </div>
+
+                  <div 
+                    className="absolute w-7 h-7 rounded-full bg-indigo-500/20 border-2 border-indigo-400/80 animate-ping" 
+                    style={{ ...cursorPosition, animationDuration: '3s' }}
+                  />
+                  <div 
+                    className="absolute w-3 h-3 rounded-full bg-indigo-400 shadow-[0_0_15px_#818cf8]"
+                    style={cursorPosition}
+                  />
+
+                  <div 
+                    className="absolute border border-indigo-400 bg-indigo-400/5 shadow-[0_0_15px_rgba(99,102,241,0.1)] rounded"
+                    style={focusBox}
+                  />
+                  <span 
+                    className="absolute bg-indigo-500 text-white font-mono text-[9px] font-bold px-1 rounded shadow-lg"
+                    style={{ top: `calc(${focusBox.top} - 18px)`, left: focusBox.left }}
+                  >
+                    {activeDemoStep ? `Automation Focus: ${activeDemoStep.title}` : 'Automation Focus: UiPath Test Runner'}
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>

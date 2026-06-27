@@ -169,3 +169,48 @@ export interface UiPathJobStatus {
   creation_time?: string | null;
   info?: string | null;
 }
+
+export interface PlaywrightBoundingBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface PlaywrightActionFrame {
+  test_case_id?: string | null;
+  index: number;
+  type?: TestAction['type'] | string | null;
+  label: string;
+  status: 'running' | 'passed' | 'failed' | string;
+  url: string;
+  bounding_box?: PlaywrightBoundingBox | null;
+  viewport: {
+    width: number;
+    height: number;
+  };
+  screenshot_b64: string;
+  error?: string | null;
+}
+
+export interface PlaywrightActionRunResult {
+  status: string;
+  package_id?: string | null;
+  started_at: number;
+  finished_at: number;
+  summary: {
+    total: number;
+    passed: number;
+    failed: number;
+  };
+  results: Array<{
+    test_case_id?: string | null;
+    name?: string | null;
+    status: string;
+    logs: string[];
+    errors: string[];
+    actions: Array<Record<string, unknown>>;
+    frames: PlaywrightActionFrame[];
+    screenshot_bytes: number;
+  }>;
+}
