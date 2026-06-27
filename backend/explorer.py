@@ -76,6 +76,7 @@ class WebExplorer:
         headless: bool = True,
         llm_rerank: bool = True,
         allow_external_links: bool = False,
+        progress_callback=None,
     ):
         self.target_url = target_url
         self.credentials = credentials or {}
@@ -86,6 +87,7 @@ class WebExplorer:
         self.headless = headless
         self.llm_rerank = llm_rerank
         self.allow_external_links = allow_external_links
+        self.progress_callback = progress_callback
 
         self.states: dict[str, State] = {}
         self.transitions: list[Transition] = []
@@ -125,11 +127,15 @@ class WebExplorer:
             self._state_paths[initial.state_id] = []
             frontier: list[FrontierItem] = []
             self._expand_frontier(frontier, initial, [])
+            self._report_progress("Captured start state")
 
             while frontier and len(self.states) < self.max_states:
                 item = heapq.heappop(frontier)
                 parent = self.states[item.parent_state_id]
                 target_id = await self._explore_frontier_item(context, parent, item)
+                self._report_progress(
+                    f"Explored {len(self.transitions)} actions, discovered {len(self.states)} states"
+                )
 
                 path = item.path_to_parent + [item.action]
                 if target_id and target_id not in self._state_paths:
@@ -396,6 +402,10 @@ class WebExplorer:
     def _register_state(self, s: State):
         self.states[s.state_id] = s
         self.visited_fingerprints[s.dom_fingerprint] = s.state_id
+
+    def _report_progress(self, message: str):
+        if self.progress_callback:
+            self.progress_callback(message)
 
     def _expand_frontier(self, frontier: list[FrontierItem], state: State, path: list):
         if len(path) >= self.max_depth:

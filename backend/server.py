@@ -80,6 +80,7 @@ async def _run_exploration(job_id: str, req: ExploreRequest):
             strategy=req.strategy,
             llm_rerank=req.llm_rerank,
             allow_external_links=req.allow_external_links,
+            progress_callback=lambda message: jobs[job_id].update({"progress": message}),
         )
         graph = await explorer.explore()
         jobs[job_id]["status"] = "done"
@@ -138,7 +139,7 @@ async def build_pipeline(req: PipelineRequest):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    return {"status": "ok", "service": "flowguard-web-agent", "version": app.version}
 
 
 @app.get("/uipath/status")
