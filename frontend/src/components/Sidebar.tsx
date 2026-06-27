@@ -46,6 +46,10 @@ export default function Sidebar({
   const [urlInput, setUrlInput] = React.useState(publicUrl);
   const [showUrlEditor, setShowUrlEditor] = React.useState(false);
 
+  React.useEffect(() => {
+    setUrlInput(publicUrl);
+  }, [publicUrl]);
+
   const navigationItems = [
     { name: 'Dashboard' as TabType, icon: LayoutDashboard },
     { name: 'App Explorer' as TabType, icon: Compass },
@@ -151,16 +155,19 @@ export default function Sidebar({
 
               {/* URL Editor input below button when active/clicked */}
               {testingSource === 'Public URL' && (showUrlEditor || publicUrl) && (
-                <form onSubmit={handleUrlSubmit} className="mt-1.5 px-1 relative flex items-center">
+                <form onSubmit={handleUrlSubmit} className="mt-1.5 px-1 flex items-center gap-1.5">
                   <input
                     type="url"
                     value={urlInput}
                     onChange={(e) => setUrlInput(e.target.value)}
                     placeholder="https://example.com"
-                    className={`w-full border focus:border-indigo-500 rounded-md py-1 px-2.5 pr-8 text-[11px] outline-none transition-all font-mono ${inputClass}`}
+                    className={`min-w-0 flex-1 border focus:border-indigo-500 rounded-md py-1 px-2.5 text-[11px] outline-none transition-all font-mono ${inputClass}`}
                   />
-                  <button type="submit" className="absolute right-2 text-indigo-400 hover:text-indigo-300 transition-colors">
-                    <Check className="w-3.5 h-3.5" />
+                  <button
+                    type="submit"
+                    className="h-7 px-2 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold transition-colors"
+                  >
+                    Apply
                   </button>
                 </form>
               )}

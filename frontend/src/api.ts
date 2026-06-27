@@ -13,7 +13,14 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const detail = await response.text();
-    throw new Error(detail || `Request failed with ${response.status}`);
+    let message = detail || `Request failed with ${response.status}`;
+    try {
+      const parsed = JSON.parse(detail);
+      message = parsed.detail || message;
+    } catch {
+      // Keep the raw response text when it is not JSON.
+    }
+    throw new Error(message);
   }
 
   return response.json() as Promise<T>;
@@ -24,12 +31,12 @@ export async function startExploration(targetUrl: string) {
     method: 'POST',
     body: JSON.stringify({
       target_url: targetUrl,
-      max_states: 30,
-      max_depth: 1,
-      max_actions_per_state: 40,
+      max_states: 8,
+      max_depth: 3,
+      max_actions_per_state: 8,
       strategy: 'bfs',
       llm_rerank: false,
-      allow_external_links: false,
+      allow_external_links: true,
     }),
   });
 }
@@ -39,5 +46,9 @@ export async function getExplorationStatus(jobId: string) {
 }
 
 export async function getBackendHealth() {
-  return request<{ status: string }>('/health');
+  const health = await request<{ status: string; service?: string }>('/health');
+  if (health.service !== 'flowguard-web-agent') {
+    throw new Error('Connected service is not the FlowGuard backend');
+  }
+  return health;
 }
