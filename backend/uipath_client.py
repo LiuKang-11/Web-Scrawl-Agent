@@ -179,6 +179,23 @@ def get_job(job_id: int | str) -> dict[str, Any]:
     )
 
 
+def list_releases(search: str | None = None) -> dict[str, Any]:
+    token = get_access_token()["access_token"]
+    query = {
+        "$select": "Id,Key,Name,ProcessKey,ProcessVersion,EnvironmentName,Description",
+        "$top": "100",
+        "$orderby": "Name asc",
+    }
+    if search:
+        escaped = search.replace("'", "''")
+        query["$filter"] = f"contains(Name,'{escaped}') or contains(ProcessKey,'{escaped}')"
+    path = "odata/Releases?" + urllib.parse.urlencode(query, safe="$(),' ")
+    return _request_json(
+        orchestrator_url(path),
+        headers=_auth_headers(token),
+    )
+
+
 def uipath_status() -> dict[str, Any]:
     config = _config()
     token = get_access_token()

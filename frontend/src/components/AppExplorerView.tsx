@@ -33,6 +33,7 @@ interface AppExplorerViewProps {
   searchText: string;
   publicUrl: string;
   onSetStatusText?: (msg: string, type?: 'info' | 'success' | 'warn') => void;
+  onGraphReady?: (graph: ExplorerGraph) => void;
 }
 
 interface TopologyNode {
@@ -206,7 +207,7 @@ function buildLiveTopology(graph: ExplorerGraph | null) {
   return { nodes, discoveredPages, detectedForms, apiEndpoints, links, userPaths };
 }
 
-export default function AppExplorerView({ searchText, publicUrl, onSetStatusText }: AppExplorerViewProps) {
+export default function AppExplorerView({ searchText, publicUrl, onSetStatusText, onGraphReady }: AppExplorerViewProps) {
   // Interactive selected node state
   const [selectedNodeId, setSelectedNodeId] = React.useState<string>('home');
   const [activeTabSub, setActiveTabSub] = React.useState<'pages' | 'forms' | 'apis'>('pages');
@@ -234,6 +235,7 @@ export default function AppExplorerView({ searchText, publicUrl, onSetStatusText
         if (status.status === 'done' && status.graph) {
           setLiveGraph(status.graph);
           setSelectedNodeId(status.graph.nodes[0]?.state_id || 'home');
+          onGraphReady?.(status.graph);
           onSetStatusText?.(`Crawl completed: ${status.graph.stats.total_states} states discovered.`, 'success');
         }
         if (status.status === 'error') {
@@ -247,7 +249,7 @@ export default function AppExplorerView({ searchText, publicUrl, onSetStatusText
     }, 1500);
 
     return () => window.clearInterval(timer);
-  }, [crawlStatus, jobId, onSetStatusText]);
+  }, [crawlStatus, jobId, onGraphReady, onSetStatusText]);
 
   const handleStartCrawl = async () => {
     setCrawlError(null);

@@ -10,6 +10,7 @@ added, so the app can demo the full workflow without faking external execution.
 from __future__ import annotations
 
 import os
+import json
 import time
 import uuid
 from dataclasses import dataclass, asdict
@@ -24,6 +25,7 @@ class Feature:
     feature: str
     page: str
     elements: list[str]
+    runnable_elements: list[dict[str, Any]]
     possible_tests: list[str]
     signals: list[str]
     risk: str = "medium"
@@ -37,6 +39,7 @@ class GeneratedTestCase:
     category: str
     source: str
     steps: list[str]
+    actions: list[dict[str, Any]]
     expected_result: str
     feature: str
 
@@ -55,6 +58,80 @@ def _element_name(element: dict[str, Any]) -> str:
     kind = element.get("type") if element.get("tag") == "input" else element.get("role")
     parts = [value for value in [text, kind, tag] if value]
     return " ".join(str(parts[0]).split()) if len(parts) == 1 else f"{parts[0]} ({parts[-1]})"
+
+
+def _runnable_element(element: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "selector": element.get("selector"),
+        "tag": element.get("tag"),
+        "role": element.get("role"),
+        "type": element.get("type"),
+        "name": element.get("name"),
+        "text": element.get("text"),
+        "href": element.get("href"),
+        "disabled": bool(element.get("disabled")),
+        "visible": element.get("visible", True),
+    }
+
+
+def _test_value_for_input(element: dict[str, Any], invalid: bool = False) -> str:
+    name = f"{element.get('name', '')} {element.get('id', '')} {element.get('type', '')}".lower()
+    if "email" in name:
+        return "not-an-email" if invalid else "flowguard@example.com"
+    if "password" in name:
+        return "" if invalid else "FlowGuard123!"
+    if "phone" in name or "tel" in name:
+        return "abc" if invalid else "5551234567"
+    if "zip" in name or "postal" in name:
+        return "bad" if invalid else "10001"
+    return "" if invalid else "FlowGuard test value"
+
+
+def _build_actions(feature: dict[str, Any], invalid: bool = False) -> list[dict[str, Any]]:
+    actions: list[dict[str, Any]] = [
+        {"type": "navigate", "url": feature.get("page", "/")},
+        {"type": "assert_page_loaded", "timeout_ms": 15000},
+    ]
+
+    elements = feature.get("runnable_elements", []) or []
+    inputs = [
+        element for element in elements
+        if element.get("selector")
+        and element.get("visible") is not False
+        and not element.get("disabled")
+        and element.get("tag") in {"input", "textarea", "select"}
+    ]
+    click_targets = [
+        element for element in elements
+        if element.get("selector")
+        and element.get("visible") is not False
+        and not element.get("disabled")
+        and (element.get("tag") in {"button", "a"} or element.get("role") in {"button", "tab", "link"})
+    ]
+
+    for element in inputs[:4]:
+        action_type = "select" if element.get("tag") == "select" else "fill"
+        actions.append({
+            "type": action_type,
+            "selector": element["selector"],
+            "value": _test_value_for_input(element, invalid=invalid),
+            "label": element.get("name") or element.get("text") or element.get("selector"),
+        })
+
+    if click_targets:
+        target = click_targets[0]
+        actions.append({
+            "type": "click",
+            "selector": target["selector"],
+            "label": target.get("text") or target.get("name") or target.get("selector"),
+        })
+
+    actions.append({"type": "wait", "milliseconds": 1000})
+    actions.append({
+        "type": "assert_no_browser_error",
+        "expected": "Page remains available and no automation exception is thrown.",
+    })
+    return actions
 
 
 def _feature_name(route: str, title: str, elements: list[dict[str, Any]]) -> str:
@@ -126,6 +203,7 @@ def extract_features(graph: dict[str, Any]) -> dict[str, Any]:
             feature=name,
             page=route,
             elements=element_names,
+            runnable_elements=[_runnable_element(element) for element in elements[:20]],
             possible_tests=sorted(set(possible_tests)),
             signals=signals or ["page"],
             risk=risk,
@@ -163,6 +241,7 @@ def generate_test_cases(features_payload: dict[str, Any]) -> dict[str, Any]:
                 "Interact with the primary visible controls",
                 "Capture screenshot, console logs, and network requests",
             ],
+            actions=_build_actions(feature),
             expected_result=f"{feature['feature']} completes without UI errors and keeps the user on an expected state.",
         ))
 
@@ -180,6 +259,7 @@ def generate_test_cases(features_payload: dict[str, Any]) -> dict[str, Any]:
                     "Submit the form",
                     "Capture validation message and page state",
                 ],
+                actions=_build_actions(feature, invalid=True),
                 expected_result="The app blocks submission, explains the error, and does not navigate unexpectedly.",
             ))
 
@@ -241,7 +321,7 @@ def run_uipath_execution(package: dict[str, Any]) -> dict[str, Any]:
         response = start_job({
             "package_id": package["package_id"],
             "base_url": package["inputs"]["base_url"],
-            "test_cases": package["test_cases"],
+            "test_cases": json.dumps(package["test_cases"]),
         })
         jobs = response.get("value", []) if isinstance(response, dict) else []
         return {

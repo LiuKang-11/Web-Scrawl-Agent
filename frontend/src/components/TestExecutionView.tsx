@@ -1,49 +1,45 @@
 import React from 'react';
 import { 
   Play, 
-  Pause, 
   X, 
   CheckCircle, 
-  Loader2, 
   Terminal, 
   ZoomIn, 
   ExternalLink, 
   Maximize2, 
   Cpu, 
-  Compass,
   AlertTriangle,
-  ChevronRight
 } from 'lucide-react';
+import { executeUiPathTests, getUiPathJob } from '../api';
+import { TestCase, UiPathJobStatus } from '../types';
 
 interface TestExecutionViewProps {
   searchText: string;
+  publicUrl: string;
   runningTestIds?: string[];
+  runningTestCases?: TestCase[];
   onSetStatusText?: (msg: string) => void;
 }
 
 export default function TestExecutionView({
   searchText,
+  publicUrl,
   runningTestIds = [],
+  runningTestCases = [],
   onSetStatusText
 }: TestExecutionViewProps) {
+  void searchText;
   
-  const [isRunning, setIsRunning] = React.useState(true);
-  const [progress, setProgress] = React.useState(60);
-  const [elapsedTime, setElapsedTime] = React.useState(84); // 84 seconds = 1:24
-  const [currentStepIndex, setCurrentStepIndex] = React.useState(3); // 4th step: checkout
+  const [isRunning, setIsRunning] = React.useState(false);
+  const [progress, setProgress] = React.useState(0);
+  const [elapsedTime, setElapsedTime] = React.useState(0);
+  const [submission, setSubmission] = React.useState<{ jobId?: number | null; packageId?: string; state?: string | null } | null>(null);
+  const [jobStatus, setJobStatus] = React.useState<UiPathJobStatus | null>(null);
+  const [executionError, setExecutionError] = React.useState<string | null>(null);
+  const submittedKeyRef = React.useRef<string>('');
   
   // Terminal logs streaming state
-  const [logs, setLogs] = React.useState<string[]>([
-    "[SYSTEM] Initiating headless chromium browser worker #42...",
-    "[INFO] Navigating to target host: https://acme-store.com",
-    "[SUCCESS] Page loaded in 142ms. HTTP 200 OK.",
-    "[SYSTEM] WalkthroughAgent: Scanning sitemap DOM elements...",
-    "[INFO] DiscoveredLoginForm loaded successfully on /login path",
-    "[ACTION] Auto-filling username field inputs...",
-    "[SUCCESS] JWT Token accepted. Session cookies established.",
-    "[ACTION] Navigating to path: /checkout",
-    "[INFO] Detecting dynamic DOM nodes on /checkout/payment...",
-  ]);
+  const [logs, setLogs] = React.useState<string[]>([]);
 
   const terminalRef = React.useRef<HTMLDivElement>(null);
 
@@ -54,48 +50,140 @@ export default function TestExecutionView({
     }
   }, [logs]);
 
+  const selectedRunKey = React.useMemo(
+    () => runningTestIds.length ? runningTestIds.join('|') : '',
+    [runningTestIds]
+  );
+
+  const isTerminalState = (state?: string | null) =>
+    ['Successful', 'Faulted', 'Stopped', 'Suspended'].includes(state || '');
+
+  const stateProgress = (state?: string | null) => {
+    switch (state) {
+      case 'Successful':
+        return 100;
+      case 'Faulted':
+      case 'Stopped':
+      case 'Suspended':
+        return 100;
+      case 'Running':
+        return 65;
+      case 'Pending':
+        return 35;
+      default:
+        return runningTestCases.length ? 15 : 0;
+    }
+  };
+
+  const displayState = executionError
+    ? 'ERROR'
+    : jobStatus?.state || submission?.state || (isRunning ? 'SUBMITTED' : runningTestCases.length ? 'READY' : 'IDLE');
+
+  React.useEffect(() => {
+    if (!selectedRunKey || runningTestCases.length === 0) {
+      setIsRunning(false);
+      setProgress(0);
+      setLogs(["[SYSTEM] Select test cases and click Run Selected to submit a UiPath execution."]);
+      return;
+    }
+    if (submittedKeyRef.current === selectedRunKey) return;
+
+    submittedKeyRef.current = selectedRunKey;
+    setElapsedTime(0);
+    setProgress(10);
+    setJobStatus(null);
+    setSubmission(null);
+    setExecutionError(null);
+    setIsRunning(true);
+    setLogs([
+      `[SYSTEM] Preparing FlowGuard package for ${runningTestCases.length} selected test case(s).`,
+      `[INFO] Target app: ${publicUrl}`,
+      "[ACTION] Submitting execution package to UiPath Orchestrator...",
+    ]);
+
+    executeUiPathTests(publicUrl, runningTestCases)
+      .then(result => {
+        setSubmission({ jobId: result.job_id, packageId: result.package_id, state: result.state });
+        setProgress(stateProgress(result.state));
+        setLogs(prev => [
+          ...prev,
+          `[SUCCESS] Package ${result.package_id} submitted to UiPath.`,
+          result.job_id ? `[INFO] Orchestrator job id: ${result.job_id}` : "[WARNING] UiPath did not return a job id.",
+          result.state ? `[INFO] Initial UiPath state: ${result.state}` : "[INFO] Waiting for UiPath job state...",
+        ]);
+        onSetStatusText?.(`Submitted ${result.submitted_count} tests to UiPath Orchestrator.`);
+      })
+      .catch(error => {
+        const message = error instanceof Error ? error.message : 'UiPath execution failed.';
+        setExecutionError(message);
+        setIsRunning(false);
+        setProgress(100);
+        setLogs(prev => [...prev, `[ERROR] ${message}`]);
+        onSetStatusText?.('UiPath execution submission failed.');
+      });
+  }, [onSetStatusText, publicUrl, runningTestCases, selectedRunKey]);
+
   // Handle timer increments
   React.useEffect(() => {
     let timerId: any;
     if (isRunning) {
       timerId = setInterval(() => {
         setElapsedTime(prev => prev + 1);
-        
-        // Progress bar simulation
-        setProgress(prev => {
-          if (prev >= 100) {
-            setIsRunning(false);
-            setProgress(100);
-            return 100;
-          }
-          return prev + Math.random() * 0.8;
-        });
-
-        // Add periodic mock logs
-        if (Math.random() > 0.6) {
-          const mockLogOptions = [
-            `[ACTION] Element query resolved: #checkout-form-submit`,
-            `[TELEMETRY] Network call verified payload size: 2.1kb`,
-            `[AI AGENT] Testing layout variance at microviewport bound...`,
-            `[DEBUG] State transition dispatched correctly: PAY_PENDING`,
-            `[WARNING] Slow response payload response detected on: POST /api/payment_intent`,
-          ];
-          const chosen = mockLogOptions[Math.floor(Math.random() * mockLogOptions.length)];
-          setLogs(prev => [...prev, `[INFO] T+${elapsedTime}s: ${chosen}`]);
-        }
       }, 1000);
     }
     return () => clearInterval(timerId);
-  }, [isRunning, elapsedTime]);
+  }, [isRunning]);
+
+  React.useEffect(() => {
+    if (!submission?.jobId || !isRunning) return;
+
+    const poll = async () => {
+      try {
+        const status = await getUiPathJob(submission.jobId as number);
+        setJobStatus(status);
+        setProgress(stateProgress(status.state));
+        setLogs(prev => {
+          const line = `[INFO] UiPath job ${status.id} state: ${status.state || 'Unknown'}`;
+          return prev[prev.length - 1] === line ? prev : [...prev, line];
+        });
+        if (isTerminalState(status.state)) {
+          setIsRunning(false);
+          if (status.state === 'Successful') {
+            setLogs(prev => [...prev, "[SUCCESS] UiPath execution finished successfully."]);
+            onSetStatusText?.('UiPath execution completed successfully.');
+          } else {
+            setLogs(prev => [...prev, `[ERROR] UiPath execution ended as ${status.state}.`]);
+            onSetStatusText?.(`UiPath execution ended as ${status.state}.`);
+          }
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unable to poll UiPath job.';
+        setExecutionError(message);
+        setLogs(prev => [...prev, `[ERROR] ${message}`]);
+      }
+    };
+
+    poll();
+    const timer = window.setInterval(poll, 4000);
+    return () => window.clearInterval(timer);
+  }, [isRunning, onSetStatusText, submission?.jobId]);
 
   // Execution pipeline configuration
-  const steps = [
-    { title: "Fetch root login index", status: "Passed", detail: "HTTP 200 OK in 142ms" },
-    { title: "Input credentials Form", status: "Passed", detail: "Autofilled with system seed parameters" },
-    { title: "Validate session cookie parameters", status: "Passed", detail: "Regenerated cookie header successfully matches" },
-    { title: "Navigate to checkout step", status: "Active", detail: "AI Agent: Generating realistic address data based on US locale" },
-    { title: "Submit stripe mock payment", status: "Pending", detail: "Awaiting preceding form outputs validation" }
-  ];
+  const steps = runningTestCases.length
+    ? runningTestCases.map((testCase, index) => ({
+        title: testCase.name,
+        status: jobStatus?.state === 'Successful'
+          ? 'Passed'
+          : executionError || ['Faulted', 'Stopped', 'Suspended'].includes(jobStatus?.state || '')
+            ? 'Failed'
+            : index === 0
+              ? 'Active'
+              : 'Pending',
+        detail: testCase.expectedResult || testCase.steps?.join(' -> ') || 'Submitted to the UiPath runner.',
+      }))
+    : [
+        { title: "Waiting for selected test cases", status: "Pending", detail: "Open Test Cases, generate from the latest crawl, then run selected specs." },
+      ];
 
   // Convert elapsed seconds to mm:ss block format
   const formatTime = (seconds: number) => {
@@ -106,9 +194,8 @@ export default function TestExecutionView({
 
   const handleAbort = () => {
     setIsRunning(false);
-    setProgress(0);
-    setElapsedTime(0);
-    if (onSetStatusText) onSetStatusText("Test execution sequence aborted manually.");
+    setLogs(prev => [...prev, "[WARNING] Local polling stopped. The UiPath job may still be running in Orchestrator."]);
+    if (onSetStatusText) onSetStatusText("Stopped local execution polling.");
   };
 
   return (
@@ -120,11 +207,14 @@ export default function TestExecutionView({
           <div className="space-y-1">
             <div className="flex items-center gap-3">
               <h2 className="text-sm font-mono font-bold text-neutral-300 uppercase tracking-widest">Active Run Pipeline</h2>
-              <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${isRunning ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/25 animate-pulse' : 'bg-neutral-800 text-neutral-400'}`}>
-                {isRunning ? 'RUNNING' : 'PAUSED'}
+              <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${isRunning ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/25 animate-pulse' : executionError ? 'bg-rose-500/10 text-rose-400 border border-rose-500/25' : 'bg-neutral-800 text-neutral-400'}`}>
+                {displayState}
               </span>
             </div>
-            <p className="text-xs text-neutral-400">Spec ID Scope: {runningTestIds.length > 0 ? runningTestIds.join(', ') : 'TC-8492, TC-8411, TC-8305'}</p>
+            <p className="text-xs text-neutral-400">Spec ID Scope: {runningTestIds.length > 0 ? runningTestIds.join(', ') : 'No selected specs yet'}</p>
+            {submission?.jobId ? (
+              <p className="text-[11px] text-neutral-500 font-mono">UiPath job: {submission.jobId} · package: {submission.packageId}</p>
+            ) : null}
           </div>
 
           {/* Quick HUD Metrics */}
@@ -135,18 +225,18 @@ export default function TestExecutionView({
             </div>
             
             <div className="bg-neutral-950 p-2 rounded-lg border border-neutral-850 px-4">
-              <span className="text-[10px] text-neutral-500 block uppercase font-semibold">SPEED</span>
-              <span className="text-emerald-400 font-bold">12 req/sec</span>
+              <span className="text-[10px] text-neutral-500 block uppercase font-semibold">ORCHESTRATOR</span>
+              <span className="text-emerald-400 font-bold">{submission?.jobId ? 'Connected' : 'Ready'}</span>
             </div>
 
             {/* Run Actions */}
             <div className="flex items-center gap-2">
               <button 
-                onClick={() => setIsRunning(!isRunning)}
+                disabled
                 className="bg-neutral-850 hover:bg-neutral-700 text-neutral-200 font-bold text-xs p-2 rounded-lg border border-neutral-700 transition-all flex items-center gap-1.5 cursor-pointer"
               >
-                {isRunning ? <Pause className="w-4 h-4 text-indigo-400" /> : <Play className="w-4 h-4 text-emerald-400" />}
-                {isRunning ? 'Pause' : 'Resume'}
+                <Play className="w-4 h-4 text-emerald-400" />
+                UiPath Managed
               </button>
               <button 
                 onClick={handleAbort}
@@ -162,7 +252,7 @@ export default function TestExecutionView({
         {/* Big HUD Progress Bar */}
         <div className="space-y-1.5">
           <div className="flex justify-between items-center text-[10px] font-mono text-neutral-400 font-bold">
-            <span>Overall Walkthrough Completion</span>
+            <span>UiPath Execution Progress</span>
             <span>{Math.floor(progress)}% Completed</span>
           </div>
           <div className="h-2 w-full bg-neutral-900 rounded-full overflow-hidden border border-neutral-800">
@@ -186,6 +276,7 @@ export default function TestExecutionView({
             {steps.map((step, idx) => {
               const isPassed = step.status === "Passed";
               const isActive = step.status === "Active";
+              const isFailed = step.status === "Failed";
               
               return (
                 <div 
@@ -203,6 +294,8 @@ export default function TestExecutionView({
                     <div className="mt-1">
                       {isPassed ? (
                         <CheckCircle className="w-4 h-4 text-emerald-400" />
+                      ) : isFailed ? (
+                        <AlertTriangle className="w-4 h-4 text-rose-400" />
                       ) : isActive ? (
                         <div className="w-4 h-4 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin" />
                       ) : (
@@ -210,7 +303,7 @@ export default function TestExecutionView({
                       )}
                     </div>
                     <div>
-                      <h4 className={`text-xs font-semibold ${isActive ? 'text-indigo-300' : 'text-neutral-200'}`}>{step.title}</h4>
+                      <h4 className={`text-xs font-semibold ${isFailed ? 'text-rose-300' : isActive ? 'text-indigo-300' : 'text-neutral-200'}`}>{step.title}</h4>
                       <p className="text-[10px] text-neutral-400 mt-1 font-mono leading-relaxed">{step.detail}</p>
                     </div>
                   </div>
@@ -284,7 +377,7 @@ export default function TestExecutionView({
                 <div className="w-2.5 h-2.5 rounded-full bg-neutral-700" />
               </div>
               <div className="bg-neutral-900 border border-neutral-800 text-[10px] font-mono py-0.5 px-3 rounded text-neutral-400 w-3/5 truncate text-center">
-                localhost:3000/checkout/payment
+                {publicUrl}
               </div>
               <div className="w-4" />
             </div>
@@ -319,7 +412,7 @@ export default function TestExecutionView({
                 className="absolute bg-indigo-500 text-white font-mono text-[9px] font-bold px-1 rounded shadow-lg"
                 style={{ top: '44%', left: '15%' }}
               >
-                Automation Focus: Stripe Payment Selector
+                Automation Focus: UiPath Test Runner
               </span>
             </div>
           </div>
