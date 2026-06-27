@@ -7,3 +7,19 @@ node_modules/
 dist/
 frontend/node_modules/
 frontend/dist/
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+# Virtual environments
+venv/
+.venv/
+venv312/
+backend/venv/
+backend/.venv/
+backend/venv312/
+
+# macOS
+.DS_Store
