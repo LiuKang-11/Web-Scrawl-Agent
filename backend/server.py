@@ -5,16 +5,24 @@ FastAPI server — REST API for the frontend
 from fastapi import FastAPI, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional
+from typing import Any, Optional
 import asyncio
 import json
 import uuid
 import os
 
+from action_runner import run_action_package
 from explorer import WebExplorer
 from llm_agent import run_full_analysis
 from pipeline import build_agent_pipeline
-from uipath_client import UiPathApiError, UiPathConfigError, uipath_status
+from uipath_client import (
+    UiPathApiError,
+    UiPathConfigError,
+    get_job,
+    list_releases,
+    start_job,
+    uipath_status,
+)
 
 app = FastAPI(title="WebGraph Explorer API", version="0.1.0")
 
@@ -52,6 +60,19 @@ class AnalyzeRequest(BaseModel):
 
 class PipelineRequest(BaseModel):
     graph: dict
+
+
+class UiPathExecuteRequest(BaseModel):
+    base_url: str
+    test_cases: list[dict]
+    package_id: Optional[str] = None
+
+
+class RunActionsRequest(BaseModel):
+    base_url: str
+    test_cases: list[dict] | str
+    package_id: Optional[str] = None
+    headless: bool = True
 
 
 # ------------------------------------------------------------------ #
@@ -150,6 +171,93 @@ async def get_uipath_status():
         raise HTTPException(400, str(exc))
     except UiPathApiError as exc:
         raise HTTPException(502, str(exc))
+
+
+@app.get("/uipath/releases")
+async def get_uipath_releases(search: Optional[str] = None):
+    """List Orchestrator releases so FlowGuard can find the ReleaseKey."""
+    try:
+        return list_releases(search)
+    except UiPathConfigError as exc:
+        raise HTTPException(400, str(exc))
+    except UiPathApiError as exc:
+        raise HTTPException(502, str(exc))
+
+
+@app.post("/uipath/execute")
+async def execute_uipath_tests(req: UiPathExecuteRequest):
+    """Submit selected FlowGuard test cases to the configured UiPath process."""
+    package_id = req.package_id or f"FG-PKG-{uuid.uuid4().hex[:8].upper()}"
+    try:
+        response = start_job({
+            "package_id": package_id,
+            "base_url": req.base_url,
+            "test_cases": json.dumps(req.test_cases),
+        })
+        submitted_jobs = response.get("value", []) if isinstance(response, dict) else []
+        first_job = submitted_jobs[0] if submitted_jobs else {}
+        return {
+            "status": "submitted",
+            "package_id": package_id,
+            "submitted_count": len(req.test_cases),
+            "job_id": first_job.get("Id"),
+            "job_key": first_job.get("Key"),
+            "state": first_job.get("State"),
+            "release_name": first_job.get("ReleaseName"),
+            "orchestrator_response": response,
+        }
+    except UiPathConfigError as exc:
+        raise HTTPException(400, str(exc))
+    except UiPathApiError as exc:
+        raise HTTPException(502, str(exc))
+
+
+@app.get("/uipath/jobs/{job_id}")
+async def get_uipath_job(job_id: int):
+    """Poll a UiPath Orchestrator job by numeric job id."""
+    try:
+        job = get_job(job_id)
+        return {
+            "id": job.get("Id"),
+            "key": job.get("Key"),
+            "state": job.get("State"),
+            "source": job.get("Source"),
+            "release_name": job.get("ReleaseName"),
+            "start_time": job.get("StartTime"),
+            "end_time": job.get("EndTime"),
+            "creation_time": job.get("CreationTime"),
+            "info": job.get("Info"),
+            "raw": job,
+        }
+    except UiPathConfigError as exc:
+        raise HTTPException(400, str(exc))
+    except UiPathApiError as exc:
+        raise HTTPException(502, str(exc))
+
+
+@app.post("/uipath/run-actions")
+async def run_uipath_actions(req: RunActionsRequest):
+    """Execute UiPath-submitted generated test actions with Playwright."""
+    try:
+        test_cases: Any = req.test_cases
+        if isinstance(test_cases, str):
+            test_cases = json.loads(test_cases)
+        if not isinstance(test_cases, list):
+            raise ValueError("test_cases must be a JSON array or a JSON string containing an array")
+
+        result = await run_action_package(
+            req.base_url,
+            test_cases,
+            headless=req.headless,
+        )
+        return {
+            "package_id": req.package_id,
+            **result,
+        }
+    except json.JSONDecodeError as exc:
+        raise HTTPException(400, f"Invalid test_cases JSON: {exc}")
+    except Exception as exc:
+        raise HTTPException(500, f"Action runner failed: {exc}")
 
 
 if __name__ == "__main__":

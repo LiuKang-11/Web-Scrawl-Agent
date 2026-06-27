@@ -1,32 +1,31 @@
 import React from 'react';
 import { 
   ClipboardList, 
-  Search, 
   Plus, 
   CheckCircle, 
   Play, 
   Trash2, 
-  AlertCircle, 
-  CheckCircle2, 
-  HelpCircle,
   Sparkles,
-  ChevronDown,
-  Info,
   X,
-  Edit
+  RefreshCw
 } from 'lucide-react';
-import { TestCase } from '../types';
+import { buildPipeline } from '../api';
+import { ExplorerGraph, TestCase } from '../types';
 
 interface TestCasesViewProps {
   searchText: string;
-  onRunSelected: (selectedIds: string[]) => void;
+  latestGraph?: ExplorerGraph | null;
+  onRunSelected: (selectedIds: string[], selectedCases: TestCase[]) => void;
   onSetStatusText?: (msg: string) => void;
+  onOpenExplorer?: () => void;
 }
 
 export default function TestCasesView({
   searchText,
+  latestGraph = null,
   onRunSelected,
-  onSetStatusText
+  onSetStatusText,
+  onOpenExplorer
 }: TestCasesViewProps) {
   
   // Base initial test cases state
@@ -113,19 +112,39 @@ export default function TestCasesView({
 
   // AI-powered test cases regeneration simulation
   const [isRegenerating, setIsRegenerating] = React.useState(false);
-  const handleRegenerate = () => {
+  const handleRegenerate = async () => {
+    if (!latestGraph) {
+      onSetStatusText?.('Run App Explorer first, then generate test cases from the crawl.');
+      onOpenExplorer?.();
+      return;
+    }
+
     setIsRegenerating(true);
-    if (onSetStatusText) onSetStatusText(`Pinging Gemini to analyze Router mappings...`);
-    
-    setTimeout(() => {
-      const gCases: TestCase[] = [
-        { id: 'TC-9005', name: 'Verify checkout modal renders properly on high pixel density screens', priority: 'Medium', category: 'UI', status: 'Generated', generatedBy: 'Walkthrough Agent' },
-        { id: 'TC-9102', name: 'Check OAuth connection callback retains state token parameter check', priority: 'Critical', category: 'Security', status: 'Generated', generatedBy: 'Form Agent' }
-      ];
-      setTestCases([...gCases, ...testCases]);
+    onSetStatusText?.('Generating test cases from the latest crawler graph...');
+
+    try {
+      const pipeline = await buildPipeline(latestGraph);
+      const generatedCases: TestCase[] = pipeline.test_cases.test_cases.map(item => ({
+        id: item.id,
+        name: item.name,
+        priority: ['Critical', 'High', 'Medium', 'Low'].includes(item.priority) ? item.priority as TestCase['priority'] : 'Medium',
+        category: ['UI', 'API', 'Security'].includes(item.category) ? item.category as TestCase['category'] : 'UI',
+        status: 'Generated',
+        generatedBy: item.source || 'FlowGuard Test Case Agent',
+        feature: item.feature,
+        steps: item.steps,
+        actions: item.actions || [],
+        expectedResult: item.expected_result,
+        source: item.source,
+      }));
+      setTestCases(generatedCases);
+      setSelectedIds(generatedCases.map(testCase => testCase.id));
+      onSetStatusText?.(`Generated ${generatedCases.length} test cases from ${pipeline.features.summary.pages} crawled pages.`);
+    } catch (error) {
+      onSetStatusText?.(error instanceof Error ? `Test generation failed: ${error.message}` : 'Test generation failed.');
+    } finally {
       setIsRegenerating(false);
-      if (onSetStatusText) onSetStatusText(`AI generated and injected 2 new robust test cases.`);
-    }, 2000);
+    }
   };
 
   // Delete an individual test case
@@ -143,6 +162,8 @@ export default function TestCasesView({
     if (activeFilter === 'All') return matchesSearch;
     return tc.status === activeFilter && matchesSearch;
   });
+
+  const selectedCases = testCases.filter(testCase => selectedIds.includes(testCase.id));
 
   return (
     <div className="flex-1 w-full p-6 overflow-y-auto max-w-[1600px] mx-auto space-y-6 select-none relative">
@@ -163,7 +184,7 @@ export default function TestCasesView({
         <div className="flex items-center gap-2.5">
           <button 
             disabled={selectedIds.length === 0}
-            onClick={() => onRunSelected(selectedIds)}
+            onClick={() => onRunSelected(selectedIds, selectedCases)}
             className="bg-indigo-600 hover:bg-indigo-500 disabled:bg-neutral-800/80 disabled:text-neutral-500 disabled:shadow-none font-bold text-xs py-2 px-4 rounded-lg flex items-center gap-1.5 transition-all shadow-[0_0_15px_rgba(99,102,241,0.15)] cursor-pointer"
           >
             <Play className="w-3.5 h-3.5 fill-current" />
@@ -184,8 +205,12 @@ export default function TestCasesView({
             disabled={isRegenerating}
             className="bg-neutral-950 hover:bg-neutral-900 disabled:opacity-40 font-bold text-xs py-2 px-4 rounded-lg flex items-center gap-1.5 border border-neutral-850 transition-all text-indigo-400 cursor-pointer"
           >
-            <Sparkles className={`w-3.5 h-3.5 text-indigo-400 ${isRegenerating ? 'animate-spin' : ''}`} />
-            {isRegenerating ? 'Pinging Gemini...' : 'Regenerate API Tests'}
+            {isRegenerating ? (
+              <RefreshCw className="w-3.5 h-3.5 text-indigo-400 animate-spin" />
+            ) : (
+              <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+            )}
+            {isRegenerating ? 'Generating...' : 'Generate from Crawl'}
           </button>
 
           <button 
@@ -276,6 +301,21 @@ export default function TestCasesView({
                           {tc.name}
                         </span>
                         <span className="text-[10px] font-mono text-neutral-500 uppercase font-semibold">{tc.id}</span>
+                        {tc.steps?.length ? (
+                          <span className="text-[10px] text-neutral-500 leading-relaxed">
+                            {tc.steps.slice(0, 2).join(' → ')}
+                          </span>
+                        ) : null}
+                        {tc.actions?.length ? (
+                          <span className="text-[10px] text-emerald-400/80 font-mono">
+                            {tc.actions.length} runnable UiPath actions
+                          </span>
+                        ) : null}
+                        {tc.expectedResult ? (
+                          <span className="text-[10px] text-neutral-500 leading-relaxed">
+                            Expected: {tc.expectedResult}
+                          </span>
+                        ) : null}
                       </div>
                     </td>
 

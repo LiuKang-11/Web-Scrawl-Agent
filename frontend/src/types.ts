@@ -9,6 +9,22 @@ export interface TestCase {
   category: 'UI' | 'API' | 'Security';
   status: 'Approved' | 'Generated' | 'Draft' | 'Failed';
   generatedBy: string;
+  feature?: string;
+  steps?: string[];
+  actions?: TestAction[];
+  expectedResult?: string;
+  source?: string;
+}
+
+export interface TestAction {
+  type: 'navigate' | 'assert_page_loaded' | 'fill' | 'select' | 'click' | 'wait' | 'assert_no_browser_error';
+  url?: string;
+  selector?: string;
+  value?: string;
+  label?: string;
+  timeout_ms?: number;
+  milliseconds?: number;
+  expected?: string;
 }
 
 export interface FailureItem {
@@ -102,4 +118,54 @@ export interface ExploreJobStatus {
   progress?: string | null;
   graph?: ExplorerGraph | null;
   error?: string | null;
+}
+
+export interface PipelineResponse {
+  features: {
+    summary: {
+      pages: number;
+      transitions: number;
+      features: number;
+      api_calls: number;
+    };
+  };
+  test_cases: {
+    test_cases: Array<{
+      id: string;
+      name: string;
+      priority: string;
+      category: string;
+      source: string;
+      steps: string[];
+      actions?: TestAction[];
+      expected_result: string;
+      feature: string;
+    }>;
+  };
+  uipath_execution_package?: {
+    package_id: string;
+  };
+  execution?: Record<string, unknown>;
+}
+
+export interface UiPathExecutionSubmission {
+  status: string;
+  package_id: string;
+  submitted_count: number;
+  job_id?: number | null;
+  job_key?: string | null;
+  state?: string | null;
+  release_name?: string | null;
+}
+
+export interface UiPathJobStatus {
+  id?: number | null;
+  key?: string | null;
+  state?: string | null;
+  source?: string | null;
+  release_name?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
+  creation_time?: string | null;
+  info?: string | null;
 }

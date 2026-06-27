@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TabType, TestingSourceType } from './types';
+import { ExplorerGraph, TabType, TestCase, TestingSourceType } from './types';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import DashboardView from './components/DashboardView';
@@ -31,6 +31,8 @@ export default function App() {
 
   // Interactive executing batch test ids
   const [runningTestIds, setRunningTestIds] = useState<string[]>([]);
+  const [runningTestCases, setRunningTestCases] = useState<TestCase[]>([]);
+  const [latestGraph, setLatestGraph] = useState<ExplorerGraph | null>(null);
   
   // Custom interactive system alert ticker status
   const [systemAlert, setSystemAlert] = useState<{ msg: string; type: 'info' | 'success' | 'warn' } | null>(null);
@@ -67,8 +69,9 @@ export default function App() {
   }, [isDarkMode]);
 
   // When user selects elements from TestCase to execute
-  const handleRunSelectedTests = (selectedIds: string[]) => {
+  const handleRunSelectedTests = (selectedIds: string[], selectedCases: TestCase[]) => {
     setRunningTestIds(selectedIds);
+    setRunningTestCases(selectedCases);
     setActiveTab('Test Execution');
     notify(`Starting active pipeline execution for selected specs: ${selectedIds.join(', ')}`, 'success');
   };
@@ -168,6 +171,7 @@ export default function App() {
             <AppExplorerView 
               searchText={searchText}
               publicUrl={publicUrl}
+              onGraphReady={setLatestGraph}
               onSetStatusText={(msg, type = 'info') => notify(msg, type)}
             />
           )}
@@ -175,15 +179,22 @@ export default function App() {
           {activeTab === 'Test Cases' && (
             <TestCasesView 
               searchText={searchText}
+              latestGraph={latestGraph}
               onRunSelected={handleRunSelectedTests}
               onSetStatusText={(msg) => notify(msg, 'success')}
+              onOpenExplorer={() => {
+                setActiveTab('App Explorer');
+                setSearchText('');
+              }}
             />
           )}
 
           {activeTab === 'Test Execution' && (
             <TestExecutionView 
               searchText={searchText}
+              publicUrl={publicUrl}
               runningTestIds={runningTestIds}
+              runningTestCases={runningTestCases}
               onSetStatusText={(msg) => notify(msg, 'info')}
             />
           )}

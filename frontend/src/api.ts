@@ -1,4 +1,11 @@
-import { ExploreJobStatus } from './types';
+import {
+  ExplorerGraph,
+  ExploreJobStatus,
+  PipelineResponse,
+  TestCase,
+  UiPathExecutionSubmission,
+  UiPathJobStatus,
+} from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
@@ -40,4 +47,35 @@ export async function getExplorationStatus(jobId: string) {
 
 export async function getBackendHealth() {
   return request<{ status: string }>('/health');
+}
+
+export async function buildPipeline(graph: ExplorerGraph) {
+  return request<PipelineResponse>('/pipeline', {
+    method: 'POST',
+    body: JSON.stringify({ graph }),
+  });
+}
+
+export async function executeUiPathTests(baseUrl: string, testCases: TestCase[], packageId?: string) {
+  return request<UiPathExecutionSubmission>('/uipath/execute', {
+    method: 'POST',
+    body: JSON.stringify({
+      base_url: baseUrl,
+      package_id: packageId,
+      test_cases: testCases.map(testCase => ({
+        id: testCase.id,
+        name: testCase.name,
+        priority: testCase.priority,
+        category: testCase.category,
+        feature: testCase.feature,
+        steps: testCase.steps || [],
+        actions: testCase.actions || [],
+        expected_result: testCase.expectedResult || '',
+      })),
+    }),
+  });
+}
+
+export async function getUiPathJob(jobId: number) {
+  return request<UiPathJobStatus>(`/uipath/jobs/${jobId}`);
 }
