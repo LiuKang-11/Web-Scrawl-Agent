@@ -233,6 +233,24 @@ Requires `ANTHROPIC_API_KEY`.
 
 ## Run Locally
 
+### Docker (recommended)
+
+Copy `.env.example` to `.env.local`, add the credentials you need, then run:
+
+```bash
+docker compose up --build
+```
+
+Open `http://localhost:3000`. The API and interactive documentation are at
+`http://localhost:8000` and `http://localhost:8000/docs`.
+
+Run automated backend checks with:
+
+```bash
+cd backend
+../.venv/bin/python -m unittest discover -s tests -v
+```
+
 ### Backend
 
 ```bash

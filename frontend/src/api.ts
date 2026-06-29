@@ -37,7 +37,7 @@ export async function startExploration(targetUrl: string) {
       max_actions_per_state: 8,
       strategy: 'bfs',
       llm_rerank: false,
-      allow_external_links: true,
+      allow_external_links: false,
     }),
   });
 }

@@ -32,6 +32,7 @@ export default function App() {
   // Interactive executing batch test ids
   const [runningTestIds, setRunningTestIds] = useState<string[]>([]);
   const [runningTestCases, setRunningTestCases] = useState<TestCase[]>([]);
+  const [testCases, setTestCases] = useState<TestCase[]>([]);
   const [latestGraph, setLatestGraph] = useState<ExplorerGraph | null>(null);
   const [latestExecutionResult, setLatestExecutionResult] = useState<PlaywrightActionRunResult | null>(null);
   
@@ -161,6 +162,10 @@ export default function App() {
           {activeTab === 'Dashboard' && (
             <DashboardView 
               searchText={searchText}
+              publicUrl={publicUrl}
+              latestGraph={latestGraph}
+              testCases={testCases}
+              executionResult={latestExecutionResult}
               onNavigateToTab={(tab) => {
                 setActiveTab(tab);
                 setSearchText('');
@@ -183,6 +188,7 @@ export default function App() {
               searchText={searchText}
               latestGraph={latestGraph}
               onRunSelected={handleRunSelectedTests}
+              onTestCasesChanged={setTestCases}
               onSetStatusText={(msg) => notify(msg, 'success')}
               onOpenExplorer={() => {
                 setActiveTab('App Explorer');

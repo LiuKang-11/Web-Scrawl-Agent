@@ -15,6 +15,8 @@ from action_runner import run_action_package
 from explorer import WebExplorer
 from llm_agent import run_full_analysis
 from pipeline import build_agent_pipeline
+from store import get_artifact, list_artifacts, save_artifact
+from security import validate_target_url
 from uipath_client import (
     UiPathApiError,
     UiPathConfigError,
@@ -26,9 +28,22 @@ from uipath_client import (
 
 app = FastAPI(title="WebGraph Explorer API", version="0.1.0")
 
+allowed_origins = [
+    origin.strip()
+    for origin in os.environ.get(
+        "FLOWGUARD_CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000"
+    ).split(",")
+    if origin.strip()
+]
+allowed_origin_regex = os.environ.get(
+    "FLOWGUARD_CORS_ORIGIN_REGEX",
+    r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
+    allow_origin_regex=allowed_origin_regex,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -82,6 +97,7 @@ class RunActionsRequest(BaseModel):
 async def _run_exploration(job_id: str, req: ExploreRequest):
     jobs[job_id]["status"] = "running"
     jobs[job_id]["progress"] = "Starting Playwright..."
+    save_artifact(job_id, "crawl", jobs[job_id], "running")
 
     creds = {}
     if req.username:
@@ -106,9 +122,11 @@ async def _run_exploration(job_id: str, req: ExploreRequest):
         jobs[job_id]["status"] = "done"
         jobs[job_id]["graph"] = graph
         jobs[job_id]["progress"] = f"Discovered {graph['stats']['total_states']} states"
+        save_artifact(job_id, "crawl", jobs[job_id], "done")
     except Exception as exc:
         jobs[job_id]["status"] = "error"
         jobs[job_id]["error"] = str(exc)
+        save_artifact(job_id, "crawl", jobs[job_id], "error")
 
 
 # ------------------------------------------------------------------ #
@@ -118,8 +136,13 @@ async def _run_exploration(job_id: str, req: ExploreRequest):
 @app.post("/explore")
 async def start_exploration(req: ExploreRequest, bg: BackgroundTasks):
     """Launch async crawl job. Returns job_id to poll."""
+    try:
+        validate_target_url(req.target_url)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
     job_id = str(uuid.uuid4())
     jobs[job_id] = {"status": "queued", "progress": "Queued"}
+    save_artifact(job_id, "crawl", jobs[job_id], "queued")
     bg.add_task(_run_exploration, job_id, req)
     return {"job_id": job_id}
 
@@ -127,9 +150,12 @@ async def start_exploration(req: ExploreRequest, bg: BackgroundTasks):
 @app.get("/explore/{job_id}")
 async def get_exploration_status(job_id: str):
     """Poll crawl job status."""
-    if job_id not in jobs:
+    job = jobs.get(job_id)
+    if job is None:
+        stored = get_artifact(job_id)
+        job = stored["payload"] if stored and stored["kind"] == "crawl" else None
+    if job is None:
         raise HTTPException(404, "Job not found")
-    job = jobs[job_id]
     return {
         "status": job["status"],
         "progress": job.get("progress"),
@@ -152,7 +178,10 @@ async def analyze_graph(req: AnalyzeRequest):
 async def build_pipeline(req: PipelineRequest):
     """Build the agent workflow payload from a crawler graph."""
     try:
-        return build_agent_pipeline(req.graph)
+        result = build_agent_pipeline(req.graph)
+        artifact_id = result.get("uipath_execution_package", {}).get("package_id", f"pipeline-{uuid.uuid4()}")
+        save_artifact(artifact_id, "pipeline", result, result.get("execution", {}).get("status"))
+        return result
     except Exception as exc:
         raise HTTPException(500, f"Pipeline failed: {exc}")
 
@@ -187,6 +216,10 @@ async def get_uipath_releases(search: Optional[str] = None):
 @app.post("/uipath/execute")
 async def execute_uipath_tests(req: UiPathExecuteRequest):
     """Submit selected FlowGuard test cases to the configured UiPath process."""
+    try:
+        validate_target_url(req.base_url)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
     package_id = req.package_id or f"FG-PKG-{uuid.uuid4().hex[:8].upper()}"
     try:
         response = start_job({
@@ -196,7 +229,7 @@ async def execute_uipath_tests(req: UiPathExecuteRequest):
         })
         submitted_jobs = response.get("value", []) if isinstance(response, dict) else []
         first_job = submitted_jobs[0] if submitted_jobs else {}
-        return {
+        result = {
             "status": "submitted",
             "package_id": package_id,
             "submitted_count": len(req.test_cases),
@@ -206,6 +239,8 @@ async def execute_uipath_tests(req: UiPathExecuteRequest):
             "release_name": first_job.get("ReleaseName"),
             "orchestrator_response": response,
         }
+        save_artifact(package_id, "uipath_execution", result, "submitted")
+        return result
     except UiPathConfigError as exc:
         raise HTTPException(400, str(exc))
     except UiPathApiError as exc:
@@ -239,6 +274,7 @@ async def get_uipath_job(job_id: int):
 async def run_uipath_actions(req: RunActionsRequest):
     """Execute UiPath-submitted generated test actions with Playwright."""
     try:
+        validate_target_url(req.base_url)
         test_cases: Any = req.test_cases
         if isinstance(test_cases, str):
             test_cases = json.loads(test_cases)
@@ -250,14 +286,32 @@ async def run_uipath_actions(req: RunActionsRequest):
             test_cases,
             headless=req.headless,
         )
-        return {
+        response = {
             "package_id": req.package_id,
             **result,
         }
+        save_artifact(req.package_id or f"local-{uuid.uuid4()}", "playwright_execution", response, result.get("status"))
+        return response
     except json.JSONDecodeError as exc:
         raise HTTPException(400, f"Invalid test_cases JSON: {exc}")
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
     except Exception as exc:
         raise HTTPException(500, f"Action runner failed: {exc}")
+
+
+@app.get("/artifacts")
+async def get_artifacts(kind: Optional[str] = None, limit: int = 50):
+    """List persisted crawl, pipeline, and execution artifacts."""
+    return {"artifacts": list_artifacts(kind, limit)}
+
+
+@app.get("/artifacts/{artifact_id}")
+async def get_persisted_artifact(artifact_id: str):
+    artifact = get_artifact(artifact_id)
+    if artifact is None:
+        raise HTTPException(404, "Artifact not found")
+    return artifact
 
 
 if __name__ == "__main__":

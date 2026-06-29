@@ -85,6 +85,19 @@ async def run_action_package(
             page = await context.new_page()
             case_logs: list[str] = []
             case_errors: list[str] = []
+            browser_errors: list[str] = []
+            page.on("pageerror", lambda error: browser_errors.append(f"Page error: {error}"))
+            page.on(
+                "console",
+                lambda message: browser_errors.append(f"Console error: {message.text}")
+                if message.type == "error" else None,
+            )
+            page.on(
+                "requestfailed",
+                lambda request: browser_errors.append(
+                    f"Request failed: {request.method} {request.url} ({request.failure or 'unknown error'})"
+                ),
+            )
             action_results: list[dict[str, Any]] = []
             frames: list[dict[str, Any]] = []
             status = "passed"
@@ -186,7 +199,14 @@ async def run_action_package(
                             ))
 
                         elif action_type == "assert_no_browser_error":
-                            case_logs.append("No browser automation error detected")
+                            ignored_fragments = tuple(action.get("ignore") or [])
+                            relevant_errors = [
+                                error for error in browser_errors
+                                if not any(fragment in error for fragment in ignored_fragments)
+                            ]
+                            if relevant_errors:
+                                raise AssertionError("; ".join(relevant_errors[:5]))
+                            case_logs.append("No page, console, or network errors detected")
                             frames.append(await _screenshot_frame(
                                 page,
                                 test_case_id=test_case.get("id"),
