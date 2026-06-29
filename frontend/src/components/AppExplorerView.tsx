@@ -225,6 +225,15 @@ export default function AppExplorerView({ searchText, publicUrl, onSetStatusText
   }, []);
 
   React.useEffect(() => {
+    setJobId(null);
+    setCrawlStatus('idle');
+    setCrawlProgress('Ready to crawl');
+    setCrawlError(null);
+    setLiveGraph(null);
+    setSelectedNodeId('home');
+  }, [publicUrl]);
+
+  React.useEffect(() => {
     if (!jobId || crawlStatus === 'done' || crawlStatus === 'error') return;
 
     const timer = window.setInterval(async () => {

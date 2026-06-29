@@ -2,6 +2,7 @@ import {
   ExplorerGraph,
   ExploreJobStatus,
   PipelineResponse,
+  PlaywrightActionRunResult,
   TestCase,
   UiPathExecutionSubmission,
   UiPathJobStatus,
@@ -31,12 +32,12 @@ export async function startExploration(targetUrl: string) {
     method: 'POST',
     body: JSON.stringify({
       target_url: targetUrl,
-      max_states: 30,
-      max_depth: 1,
-      max_actions_per_state: 40,
+      max_states: 8,
+      max_depth: 2,
+      max_actions_per_state: 8,
       strategy: 'bfs',
       llm_rerank: false,
-      allow_external_links: false,
+      allow_external_links: true,
     }),
   });
 }
@@ -78,4 +79,25 @@ export async function executeUiPathTests(baseUrl: string, testCases: TestCase[],
 
 export async function getUiPathJob(jobId: number) {
   return request<UiPathJobStatus>(`/uipath/jobs/${jobId}`);
+}
+
+export async function runPlaywrightActions(baseUrl: string, testCases: TestCase[], packageId?: string) {
+  return request<PlaywrightActionRunResult>('/uipath/run-actions', {
+    method: 'POST',
+    body: JSON.stringify({
+      base_url: baseUrl,
+      package_id: packageId,
+      headless: true,
+      test_cases: testCases.map(testCase => ({
+        id: testCase.id,
+        name: testCase.name,
+        priority: testCase.priority,
+        category: testCase.category,
+        feature: testCase.feature,
+        steps: testCase.steps || [],
+        actions: testCase.actions || [],
+        expected_result: testCase.expectedResult || '',
+      })),
+    }),
+  });
 }

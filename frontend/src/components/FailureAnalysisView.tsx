@@ -12,60 +12,63 @@ import {
   Loader2,
   Workflow
 } from 'lucide-react';
-import { FailureItem } from '../types';
+import { FailureItem, PlaywrightActionRunResult, TestCase } from '../types';
 
 interface FailureAnalysisViewProps {
   searchText: string;
+  testCases?: TestCase[];
+  executionResult?: PlaywrightActionRunResult | null;
   onSetStatusText?: (msg: string) => void;
 }
 
 export default function FailureAnalysisView({
   searchText,
+  testCases = [],
+  executionResult = null,
   onSetStatusText
 }: FailureAnalysisViewProps) {
-  
-  const [failures, setFailures] = React.useState<FailureItem[]>([
-    {
-      id: 'FAIL-9422',
-      title: 'Checkout payment timeout under simulated concurrency',
-      step: 'Step 4: Execute payment processing webhook response',
-      severity: 'Critical Failure',
-      riskScore: 94,
-      diffPercent: 'Network Latency > 2.5s',
-      screenshotUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuD5eNeFDI5VQhmvQJb86I-y6z8vmcxuHPKGFg2kpFu-abOzychElrqcg3qk8M1AosZD6jpwc4A2OG_wCN1H78ZyuwAUtj_r7KeTHduEYgRL5tA4qQlFO8Yb0pHYUidz4SmNou7AX9xm2uXpQTRPeQm3SkbB6j8NouSMwOJMJBQV3eW9aUFwcYeS1KXOkW-tuI34Odl2LSbCbT0a36CZL7G_LJL-z6Lugk59sD5GLBxet7av3eU0yh4iKcZLKMdUU67zcOsUE7FJejk',
-      targetArea: { top: '35%', left: '12%', width: '75%', height: '40%' },
-      targetLabel: 'Stripe Credit Card Secure Iframe container',
-      iconName: 'warning',
-      rootCause: "A race condition on checkout callback dispatchers triggers before Stripe Webhook intent propagates fully.",
-      suggestedFix: "Implement latching wait locks on transaction state tokens before redirecting consumers to index confirmation page.",
-      logs: [
-        "TypeError: Cannot read properties of undefined (reading 'payment_intent')",
-        "  at PaymentGatewayController._resolveStripePay (controllers/services/pay.js:42:15)",
-        "  at processTicksAndRejections (node:internal/process/task_queues:95:5)",
-        "  at async executePaymentPipeline (routes/api/checkout/pay.js:142:18)"
-      ]
-    },
-    {
-      id: 'FAIL-6811',
-      title: 'Responsive navigation alignment overlapping on viewport width scale < 380px',
-      step: 'Step 2: Compare layouts on mobile viewport triggers',
-      severity: 'Visual Regression',
-      riskScore: 68,
-      diffPercent: 'Visual discrepancy rate: 14.5%',
-      screenshotUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBdy2Xe2IijyKv-tbNQyLYQSsCBd8cEtf3RM-vuuij0RgiNeaEl_HLxUX6SPVNmBaGo5xSo0bZ0ngnBZAQfRuHbDkolIRrxW40nBTpzTLE53e0EO5zOydqwLQ5kiAFWXI5ztKpui6DWOwO2LSx0yrcBZtv8LJo_tertPO6UF4uh7P2EsmnPDaUBGIU6oP5beeBqs8Wy45FIsv6cvaXcjp_wZUsSZJJfhVg0v6WDvREb8R3-0MPxtDdgITLWOjpwb_ssxu0-xzKQf_Q',
-      targetArea: { top: '15%', left: '60%', width: '38%', height: '10%' },
-      targetLabel: 'Add to cart mobile margin overlay',
-      iconName: 'visibility_off',
-      rootCause: "Absolute positioning offsets overriding flex parameters inside narrow mobile headers standard.",
-      suggestedFix: "Migrate navigation elements to mobile grid alignments or leverage Tailwind CSS responsive utility classes (sm:flex-col, etc.).",
-      logs: [
-        "[VISUAL COMPILATION] Viewport scale set: width=360px height=800px",
-        "[COMPARE] Comparing pixels with layout baselines image #283",
-        "[FAILURE] Element mismatch triggered at node coordinates X=240 Y=14",
-        "[DIFF_MAP] Highlighted 38 overlaps. Mismatch threshold exceeded."
-      ]
-    }
-  ]);
+
+  const executionFailures = React.useMemo<FailureItem[]>(() => {
+    if (!executionResult) return [];
+
+    return executionResult.results
+      .filter(result => result.status !== 'passed')
+      .map((result, index) => {
+        const testCase = testCases.find(item => item.id === result.test_case_id);
+        const failedFrame = result.frames.find(frame => frame.status === 'failed') || result.frames[result.frames.length - 1];
+        const box = failedFrame?.bounding_box;
+        const viewport = failedFrame?.viewport;
+        const targetArea = box && viewport
+          ? {
+              top: `${(box.y / viewport.height) * 100}%`,
+              left: `${(box.x / viewport.width) * 100}%`,
+              width: `${(box.width / viewport.width) * 100}%`,
+              height: `${(box.height / viewport.height) * 100}%`,
+            }
+          : { top: '20%', left: '10%', width: '80%', height: '45%' };
+
+        return {
+          id: `FAIL-${String(index + 1).padStart(4, '0')}`,
+          title: testCase?.name || result.name || `Generated test ${result.test_case_id || index + 1} failed`,
+          step: failedFrame ? `Step ${failedFrame.index}: ${failedFrame.label}` : 'Playwright action runner failed before frame capture',
+          severity: testCase?.priority === 'Critical' ? 'Critical Failure' : 'Visual Regression',
+          riskScore: testCase?.priority === 'Critical' ? 92 : 68,
+          diffPercent: result.errors[0] || 'Playwright action failed',
+          screenshotUrl: failedFrame?.screenshot_b64 ? `data:image/png;base64,${failedFrame.screenshot_b64}` : '',
+          targetArea,
+          targetLabel: failedFrame?.label || testCase?.feature || 'Failed action target',
+          iconName: 'warning',
+          rootCause: result.errors[0] || 'The generated selector or page state did not match the browser during execution.',
+          suggestedFix: 'Review the highlighted selector, update crawler/test generation rules, or add a wait/precondition before this action.',
+          logs: [
+            ...result.logs.map(log => `[PLAYWRIGHT] ${log}`),
+            ...result.errors.map(error => `[ERROR] ${error}`),
+          ],
+        } as FailureItem;
+      });
+  }, [executionResult, testCases]);
+
+  const [resolvedFailures, setResolvedFailures] = React.useState<Record<string, FailureItem>>({});
 
   // Expansion toggle states for stack trace lists
   const [expandedIds, setExpandedIds] = React.useState<string[]>(['FAIL-9422']);
@@ -94,13 +97,18 @@ export default function FailureAnalysisView({
     setTimeout(() => {
       setIsFixingId(null);
       // Change severity or state to fixed representation
-      setFailures(failures.map(item => 
-        item.id === id ? { ...item, severity: 'Minor issue' as any, riskScore: 12, diffPercent: 'RESOLVED via AI Patch' } : item
-      ));
+      const current = executionFailures.find(item => item.id === id);
+      if (current) {
+        setResolvedFailures(prev => ({
+          ...prev,
+          [id]: { ...current, severity: 'Minor issue' as any, riskScore: 12, diffPercent: 'RESOLVED via AI Patch' },
+        }));
+      }
       if (onSetStatusText) onSetStatusText(`Patched file pay.controller.js. Restarting continuous sandbox integration.`);
     }, 2000);
   };
 
+  const failures = executionFailures.map(item => resolvedFailures[item.id] || item);
   const filteredFailures = failures.filter(item => 
     searchText ? (item.title.toLowerCase().includes(searchText.toLowerCase()) || item.id.toLowerCase().includes(searchText.toLowerCase())) : true
   );
