@@ -390,12 +390,33 @@ export default function AppExplorerView({ searchText, publicUrl, onSetStatusText
     { sourceId: 'cart', targetId: 'checkout' }
   ];
 
-  const nodes = liveTopology?.nodes || fallbackNodes;
-  const discoveredPages = liveTopology?.discoveredPages || fallbackDiscoveredPages;
-  const detectedForms = liveTopology?.detectedForms || fallbackDetectedForms;
-  const apiEndpoints = liveTopology?.apiEndpoints || fallbackApiEndpoints;
-  const userPaths = liveTopology?.userPaths?.length ? liveTopology.userPaths : fallbackUserPaths;
-  const links = liveTopology?.links?.length ? liveTopology.links : fallbackLinks;
+  const awaitingCrawlNode: TopologyNode = {
+    id: 'awaiting-crawl',
+    label: 'Awaiting crawl',
+    route: '/',
+    description: 'Start a crawl to populate this topology with live application states.',
+    reachedBy: 'No crawl completed',
+    type: 'Page',
+    x: 325,
+    y: 180,
+    status: 'Draft',
+    traffic: '0 API calls',
+    latency: '0 actions',
+    tech: 'No page inspected',
+    activeApis: [],
+    cookies: [],
+    formsCount: 0,
+    url: publicUrl,
+    title: 'No crawl data',
+    summary: 'Start the crawler to inspect this target.',
+    elements: [],
+  };
+  const nodes = liveTopology?.nodes || [awaitingCrawlNode];
+  const discoveredPages = liveTopology?.discoveredPages || [];
+  const detectedForms = liveTopology?.detectedForms || [];
+  const apiEndpoints = liveTopology?.apiEndpoints || [];
+  const userPaths = liveTopology?.userPaths || [];
+  const links = liveTopology?.links || [];
 
   const selectedNode = nodes.find(n => n.id === selectedNodeId) || nodes[0];
 

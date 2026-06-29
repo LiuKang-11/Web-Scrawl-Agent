@@ -18,6 +18,7 @@ interface TestCasesViewProps {
   onRunSelected: (selectedIds: string[], selectedCases: TestCase[]) => void;
   onSetStatusText?: (msg: string) => void;
   onOpenExplorer?: () => void;
+  onTestCasesChanged?: (testCases: TestCase[]) => void;
 }
 
 export default function TestCasesView({
@@ -25,19 +26,16 @@ export default function TestCasesView({
   latestGraph = null,
   onRunSelected,
   onSetStatusText,
-  onOpenExplorer
+  onOpenExplorer,
+  onTestCasesChanged
 }: TestCasesViewProps) {
   
   // Base initial test cases state
-  const [testCases, setTestCases] = React.useState<TestCase[]>([
-    { id: 'TC-8492', name: 'Verify Stripe Webhook handles payload signatures securely', priority: 'Critical', category: 'API', status: 'Failed', generatedBy: 'Walkthrough Agent' },
-    { id: 'TC-8411', name: 'Check cart total calculation matches checkout summary on decimal rounding', priority: 'High', category: 'UI', status: 'Failed', generatedBy: 'Walkthrough Agent' },
-    { id: 'TC-8305', name: 'Validate promo code field triggers dynamic order price reduction update', priority: 'Medium', category: 'UI', status: 'Failed', generatedBy: 'Form Agent' },
-    { id: 'TC-8134', name: 'Regress CSRF state parameters on multi-step forms submission', priority: 'Critical', category: 'Security', status: 'Approved', generatedBy: 'Walkthrough Agent' },
-    { id: 'TC-8110', name: 'Test cookie session timeout regeneration and cross-tab storage synchrony', priority: 'High', category: 'Security', status: 'Approved', generatedBy: 'Scan Engine' },
-    { id: 'TC-7890', name: 'Compare visual checkout layout consistency across microviewport bounds', priority: 'Medium', category: 'UI', status: 'Draft', generatedBy: 'Vision Agent' },
-    { id: 'TC-7650', name: 'Verify rate limiter blocks burst login attempts over 10 reqs/sec threshold', priority: 'High', category: 'API', status: 'Draft', generatedBy: 'Walkthrough Agent' },
-  ]);
+  const [testCases, setTestCases] = React.useState<TestCase[]>([]);
+
+  React.useEffect(() => {
+    onTestCasesChanged?.(testCases);
+  }, [onTestCasesChanged, testCases]);
 
   // Selected Checkboxes states
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);

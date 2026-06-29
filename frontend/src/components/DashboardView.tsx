@@ -14,22 +14,33 @@ import {
   Clock,
   Info
 } from 'lucide-react';
+import { ExplorerGraph, PlaywrightActionRunResult, TestCase } from '../types';
 
 interface DashboardViewProps {
   searchText: string;
+  publicUrl: string;
+  latestGraph?: ExplorerGraph | null;
+  testCases?: TestCase[];
+  executionResult?: PlaywrightActionRunResult | null;
   onNavigateToTab: (tabName: 'App Explorer' | 'Test Cases' | 'Test Execution' | 'Failure Analysis' | 'Reports') => void;
   onSetStatusText?: (msg: string) => void;
 }
 
 export default function DashboardView({
   searchText,
+  publicUrl,
+  latestGraph = null,
+  testCases = [],
+  executionResult = null,
   onNavigateToTab,
   onSetStatusText
 }: DashboardViewProps) {
-  const [pagesDiscovered, setPagesDiscovered] = React.useState(48);
-  const [totalTestCases, setTotalTestCases] = React.useState(156);
-  const [passedRate, setPassedRate] = React.useState(98.4);
-  const [failedCount, setFailedCount] = React.useState(3);
+  const pagesDiscovered = latestGraph?.stats.total_states || 0;
+  const totalTestCases = testCases.length;
+  const failedCount = executionResult?.summary.failed || 0;
+  const passedRate = executionResult?.summary.total
+    ? Math.round((executionResult.summary.passed / executionResult.summary.total) * 1000) / 10
+    : 0;
   
   const [isScanning, setIsScanning] = React.useState(false);
   const [scanProgress, setScanProgress] = React.useState(0);
@@ -54,9 +65,6 @@ export default function DashboardView({
           clearInterval(interval);
           setTimeout(() => {
             setIsScanning(false);
-            setPagesDiscovered(52);
-            setTotalTestCases(164);
-            setPassedRate(98.8);
             if (onSetStatusText) onSetStatusText('Scan finished successfully. Found 4 new pages.');
           }, 600);
           return 100;
@@ -81,19 +89,24 @@ export default function DashboardView({
   };
 
   // Static bars representing coverage chart data
-  const coverageData = [
-    { name: 'Auth', activeHeight: 'h-[40%]', percent: '76%', colorClass: 'bg-indigo-400/35 hover:bg-indigo-400/50' },
-    { name: 'Cart', activeHeight: 'h-[70%]', percent: '84%', colorClass: 'bg-indigo-400/45 hover:bg-indigo-400/60' },
-    { name: 'Checkout', activeHeight: 'h-[90%]', percent: '98%', colorClass: 'bg-emerald-400/50 border-t-2 border-emerald-400' },
-    { name: 'Profile', activeHeight: 'h-[50%]', percent: '88%', colorClass: 'bg-indigo-400/35 hover:bg-indigo-400/50' },
-    { name: 'API', activeHeight: 'h-[25%]', percent: '52%', colorClass: 'bg-rose-400/35 border-t-2 border-rose-400 hover:bg-rose-400/50' },
-  ];
+  const coverageData = (['UI', 'API', 'Security'] as const).map(category => {
+    const count = testCases.filter(testCase => testCase.category === category).length;
+    const percent = totalTestCases ? Math.round((count / totalTestCases) * 100) : 0;
+    return {
+      name: category,
+      activeHeight: percent >= 75 ? 'h-[90%]' : percent >= 50 ? 'h-[70%]' : percent ? 'h-[40%]' : 'h-[2%]',
+      percent: `${percent}%`,
+      colorClass: count ? 'bg-indigo-400/45 hover:bg-indigo-400/60' : 'bg-neutral-800',
+    };
+  });
 
-  const failures = [
-    { tc: 'TC-8492', title: 'Stripe Webhook Timeout', time: '2m ago' },
-    { tc: 'TC-8411', title: 'Cart Total Calculation', time: '5m ago' },
-    { tc: 'TC-8305', title: 'Promo Code Validation', time: '12m ago' },
-  ].filter(f => 
+  const failures = (executionResult?.results || [])
+    .filter(result => result.status !== 'passed')
+    .map(result => ({
+      tc: result.test_case_id || 'Unknown',
+      title: result.name || result.errors[0] || 'Test execution failed',
+      time: 'Latest run',
+    })).filter(f =>
     searchText ? (f.title.toLowerCase().includes(searchText.toLowerCase()) || f.tc.toLowerCase().includes(searchText.toLowerCase())) : true
   );
 
@@ -106,7 +119,7 @@ export default function DashboardView({
         
         <div className="flex flex-col gap-2 z-10">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-neutral-100 tracking-tight font-display">Acme Web Portal</h1>
+            <h1 className="text-2xl font-bold text-neutral-100 tracking-tight font-display">{publicUrl || 'No target selected'}</h1>
             <span className="bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded text-xs font-semibold flex items-center gap-1">
               <Radio className="w-3.5 h-3.5 animate-pulse text-indigo-400" />
               {isScanning ? 'Scanning...' : 'Analyzing'}

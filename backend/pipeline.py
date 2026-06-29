@@ -401,7 +401,7 @@ def build_agent_pipeline(graph: dict[str, Any]) -> dict[str, Any]:
     execution = run_uipath_execution(package)
     failure_analysis = analyze_failures(execution)
 
-    return {
+    result = {
         "workflow": [
             "crawl_web_app",
             "extract_features",
@@ -418,3 +418,17 @@ def build_agent_pipeline(graph: dict[str, Any]) -> dict[str, Any]:
         "execution": execution,
         "failure_analysis": failure_analysis,
     }
+
+    load_env_files()
+    if os.environ.get("FLOWGUARD_ENABLE_AI_ANALYSIS", "false").lower() == "true" and os.environ.get("ANTHROPIC_API_KEY"):
+        try:
+            from llm_agent import run_full_analysis
+            result["ai_analysis"] = run_full_analysis(graph)
+        except Exception as exc:
+            result["ai_analysis"] = {
+                "status": "unavailable",
+                "error": str(exc),
+                "fallback": "Deterministic feature and test generation completed successfully.",
+            }
+
+    return result
